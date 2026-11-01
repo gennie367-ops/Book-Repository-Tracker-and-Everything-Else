@@ -1,0 +1,25 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.env
+venv/
+ENV/
+
+# Databases (store locally or mount on server)
+library.db
+books.db
+*.sqlite
+*.sqlite3
+
+# Audiobooks and ebooks storage (large files over GitHub 100MB limit)
+books_storage/
+import_inbox/
+static/covers/*
+!static/covers/.gitkeep
+
+# Scratch and log files
+scratch/
+*.log
+.gemini/

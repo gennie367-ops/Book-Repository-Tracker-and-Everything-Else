@@ -1,0 +1,48 @@
+name: house-of-wind
+
+services:
+  house-of-wind:
+    image: house-of-wind:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: house-of-wind
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - /DATA/AppData/house-of-wind:/data
+    environment:
+      - DATA_DIR=/data
+    x-casaos:
+      envs:
+        - container: DATA_DIR
+          description:
+            en_us: "Internal container persistent storage path"
+      ports:
+        - container: "8000"
+          description:
+            en_us: "Web UI Port"
+      volumes:
+        - container: /data
+          description:
+            en_us: "Persistent data directory (database, ebooks, audiobooks, covers)"
+
+x-casaos:
+  architectures:
+    - amd64
+    - arm64
+  main: house-of-wind
+  description:
+    en_us: "House of Wind — Personal book sanctuary with Romance.io spice ratings, reading timer, audio player, Calibre/Audiobookshelf/Fable imports, and custom aesthetic themes."
+  tagline:
+    en_us: "Your Personal Reading Sanctuary & Library"
+  developer: "House of Wind"
+  author: "House of Wind"
+  icon: "https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/audiobookshelf.png"
+  thumbnail: ""
+  title:
+    en_us: "House of Wind"
+  category: "Media"
+  port_map: "8000"
+  index: "/"

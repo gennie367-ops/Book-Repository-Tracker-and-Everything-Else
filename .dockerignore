@@ -1,0 +1,15 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.git
+.gitignore
+library.db
+books.db
+books_storage/
+import_inbox/
+static/covers/*
+!static/covers/.gitkeep
+scratch/
+*.log
+.gemini/
