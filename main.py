@@ -287,6 +287,82 @@ def init_db():
 init_db()
 
 
+def hash_user_password(password: str, salt: str) -> str:
+    return hashlib.pbkdf2_hmac(
+        'sha256',
+        password.encode('utf-8'),
+        salt.encode('utf-8'),
+        100000
+    ).hex()
+
+
+def verify_user_password(password: str, salt: str, password_hash: str) -> bool:
+    calc = hash_user_password(password, salt)
+    return secrets.compare_digest(calc, password_hash)
+
+
+def get_current_user_from_request(request: Request) -> Optional[dict]:
+    token = request.cookies.get("book_app_session")
+    if not token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:].strip()
+    if not token:
+        return None
+
+    now_iso = datetime.datetime.utcnow().isoformat()
+    conn = sqlite3.connect(DB_FILE)
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT u.id, u.username, u.display_name, u.role, u.theme_preference, u.custom_themes
+        FROM user_sessions s
+        JOIN users u ON s.user_id = u.id
+        WHERE s.token = ? AND s.expires_at > ?
+    """, (token, now_iso))
+    row = cur.fetchone()
+    conn.close()
+
+    if not row:
+        return None
+
+    try:
+        custom_th = json.loads(row[5]) if row[5] else []
+    except Exception:
+        custom_th = []
+
+    return {
+        "id": row[0],
+        "username": row[1],
+        "display_name": row[2] or row[1],
+        "role": row[3],
+        "theme_preference": row[4] or "",
+        "custom_themes": custom_th
+    }
+
+
+def require_admin_to_delete(request: Request) -> Optional[dict]:
+    conn = sqlite3.connect(DB_FILE)
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM users")
+    user_count = cur.fetchone()[0]
+    conn.close()
+
+    if user_count > 0:
+        user = get_current_user_from_request(request)
+        if not user:
+            raise HTTPException(
+                status_code=401,
+                detail="Authentication required: Please sign in to delete books or manage the trash vault."
+            )
+        if user.get("role") != "admin":
+            raise HTTPException(
+                status_code=403,
+                detail="Permission Restricted: Reader accounts have full access to view, read, and upload, but are not permitted to delete books or files."
+            )
+        return user
+    return None
+
+
 def get_all_settings() -> dict:
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
@@ -1865,7 +1941,8 @@ def set_series_override(payload: SeriesOverridePayload):
 
 
 @app.delete("/series/override/{series_name}")
-def delete_series_override(series_name: str):
+def delete_series_override(series_name: str, request: Request):
+    require_admin_to_delete(request)
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("DELETE FROM series_overrides WHERE LOWER(series_name) = LOWER(?)", (series_name.strip(),))
@@ -2378,7 +2455,8 @@ def update_book_metadata(book_id: int, payload: BookUpdate):
 
 # --- 9. DELETE & 30-DAY TRASH VAULT ---
 @app.delete("/books/{book_id}")
-def delete_book(book_id: int, permanent: bool = False, delete_file: bool = True):
+def delete_book(book_id: int, request: Request, permanent: bool = False, delete_file: bool = True):
+    require_admin_to_delete(request)
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("SELECT filename, deleted_at FROM books WHERE id = ?", (book_id,))
@@ -2479,7 +2557,8 @@ def restore_book_from_trash(book_id: int):
 
 
 @app.post("/trash/empty")
-def empty_trash_vault():
+def empty_trash_vault(request: Request):
+    require_admin_to_delete(request)
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("SELECT id, filename FROM books WHERE deleted_at IS NOT NULL AND deleted_at != ''")
@@ -6251,3 +6330,133 @@ def auth_save_theme(payload: ThemePreferencePayload, request: Request):
         return {"status": "success", "message": "Theme preference saved locally."}
 
 
+
+
+# ==========================================
+# ADMIN USER MANAGEMENT ENDPOINTS
+# ==========================================
+
+class AdminCreateUserPayload(BaseModel):
+    username: str
+    password: str
+    display_name: Optional[str] = ""
+    role: Optional[str] = "reader"
+
+class AdminUpdateRolePayload(BaseModel):
+    role: str
+
+class AdminResetPasswordPayload(BaseModel):
+    new_password: str
+
+@app.get("/admin/users")
+def admin_list_users(request: Request):
+    require_admin_to_delete(request)
+    conn = sqlite3.connect(DB_FILE)
+    cur = conn.cursor()
+    cur.execute("SELECT id, username, display_name, role, created_at FROM users ORDER BY id ASC")
+    rows = cur.fetchall()
+    conn.close()
+    users = []
+    for r in rows:
+        users.append({
+            "id": r[0],
+            "username": r[1],
+            "display_name": r[2] or r[1],
+            "role": r[3],
+            "created_at": r[4]
+        })
+    return {"status": "success", "users": users}
+
+@app.post("/admin/users")
+def admin_create_user(payload: AdminCreateUserPayload, request: Request):
+    require_admin_to_delete(request)
+    u = payload.username.strip()
+    p = payload.password.strip()
+    d = (payload.display_name or "").strip()
+    role = "admin" if payload.role == "admin" else "reader"
+
+    if len(u) < 3:
+        raise HTTPException(status_code=400, detail="Username must be at least 3 characters.")
+    if len(p) < 4:
+        raise HTTPException(status_code=400, detail="Password must be at least 4 characters.")
+
+    salt = secrets.token_hex(16)
+    p_hash = hash_user_password(p, salt)
+    disp_name = d if d else u
+
+    conn = sqlite3.connect(DB_FILE)
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            INSERT INTO users (username, password_hash, salt, display_name, role)
+            VALUES (?, ?, ?, ?, ?)
+        """, (u, p_hash, salt, disp_name, role))
+        user_id = cur.lastrowid
+        conn.commit()
+    except sqlite3.IntegrityError:
+        conn.close()
+        raise HTTPException(status_code=400, detail="A user with that username already exists.")
+    conn.close()
+
+    return {
+        "status": "success",
+        "message": f"Created user {disp_name} ({role})",
+        "user": {
+            "id": user_id,
+            "username": u,
+            "display_name": disp_name,
+            "role": role
+        }
+    }
+
+@app.put("/admin/users/{user_id}/role")
+def admin_update_role(user_id: int, payload: AdminUpdateRolePayload, request: Request):
+    curr_user = require_admin_to_delete(request)
+    new_role = "admin" if payload.role == "admin" else "reader"
+
+    conn = sqlite3.connect(DB_FILE)
+    cur = conn.cursor()
+
+    if curr_user and curr_user["id"] == user_id and new_role != "admin":
+        cur.execute("SELECT COUNT(*) FROM users WHERE role = 'admin'")
+        admin_count = cur.fetchone()[0]
+        if admin_count <= 1:
+            conn.close()
+            raise HTTPException(status_code=400, detail="Cannot demote the only administrator.")
+
+    cur.execute("UPDATE users SET role = ? WHERE id = ?", (new_role, user_id))
+    conn.commit()
+    conn.close()
+    return {"status": "success", "message": f"User role updated to {new_role}."}
+
+@app.post("/admin/users/{user_id}/reset-password")
+def admin_reset_password(user_id: int, payload: AdminResetPasswordPayload, request: Request):
+    require_admin_to_delete(request)
+    p = payload.new_password.strip()
+    if len(p) < 4:
+        raise HTTPException(status_code=400, detail="Password must be at least 4 characters.")
+
+    salt = secrets.token_hex(16)
+    p_hash = hash_user_password(p, salt)
+
+    conn = sqlite3.connect(DB_FILE)
+    cur = conn.cursor()
+    cur.execute("UPDATE users SET password_hash = ?, salt = ? WHERE id = ?", (p_hash, salt, user_id))
+    cur.execute("DELETE FROM user_sessions WHERE user_id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+    return {"status": "success", "message": "Password reset successfully."}
+
+@app.delete("/admin/users/{user_id}")
+def admin_delete_user(user_id: int, request: Request):
+    curr_user = require_admin_to_delete(request)
+    if curr_user and curr_user["id"] == user_id:
+        raise HTTPException(status_code=400, detail="You cannot delete your own active administrator account.")
+
+    conn = sqlite3.connect(DB_FILE)
+    cur = conn.cursor()
+    cur.execute("DELETE FROM user_sessions WHERE user_id = ?", (user_id,))
+    cur.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+    return {"status": "success", "message": "User account removed."}
