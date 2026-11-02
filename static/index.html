@@ -2668,6 +2668,13 @@
       border: 1px solid rgba(255, 255, 255, 0.15) !important;
       color: #ffffff !important;
     }
+    #searchInput::-webkit-search-decoration,
+    #searchInput::-webkit-search-cancel-button,
+    #searchInput::-webkit-search-results-button,
+    #searchInput::-webkit-search-results-decoration {
+      -webkit-appearance: none;
+      display: none;
+    }
     .search-bar .search-icon {
       position: absolute;
       left: 0.95rem;
@@ -3798,8 +3805,16 @@
       <div class="search-bar">
         <span class="search-icon">🔍</span>
         <input
-          type="text"
+          type="search"
           id="searchInput"
+          name="search_catalog"
+          autocomplete="off"
+          autocorrect="off"
+          autocapitalize="off"
+          spellcheck="false"
+          data-lpignore="true"
+          data-1p-ignore="true"
+          data-form-type="other"
           placeholder="Search title, author, narrator, series, or ISBN..."
           oninput="handleSearch(this.value)"
         />
@@ -4527,11 +4542,11 @@
         <div class="form-row">
           <div class="form-group">
             <label>Your Email Address / Username</label>
-            <input type="text" id="settingSmtpUser" placeholder="youremail@gmail.com" />
+            <input type="text" id="settingSmtpUser" name="smtp_user" placeholder="youremail@gmail.com" autocomplete="off" />
           </div>
           <div class="form-group">
             <label>App Password / Password</label>
-            <input type="password" id="settingSmtpPassword" placeholder="••••••••" />
+            <input type="password" id="settingSmtpPassword" name="smtp_pass" placeholder="••••••••" autocomplete="new-password" />
           </div>
         </div>
 
@@ -6324,7 +6339,7 @@
       // Clear search keywords when switching views so old searches don't zero out shelves
       if (!subFilter) {
         mainSearchQuery = "";
-        const mainInput = document.getElementById("mainSearchInput");
+        const mainInput = document.getElementById("searchInput");
         if (mainInput) mainInput.value = "";
       }
       inViewFilterText = "";
@@ -13355,6 +13370,21 @@
       }
     }
 
+    // Prevent browser password autofill from populating top search bar
+    function cleanSearchAutofill() {
+      const s = document.getElementById("searchInput");
+      if (s && !mainSearchQuery && s.value) {
+        s.value = "";
+      }
+    }
+    window.addEventListener("DOMContentLoaded", cleanSearchAutofill);
+    window.addEventListener("load", () => {
+      cleanSearchAutofill();
+      setTimeout(cleanSearchAutofill, 50);
+      setTimeout(cleanSearchAutofill, 250);
+      setTimeout(cleanSearchAutofill, 800);
+    });
+
     checkAuthStatus();
     initTheme();
     loadBooks();
@@ -13546,11 +13576,11 @@
       <form id="authSignInForm" onsubmit="submitAuthSignIn(event)">
         <div class="form-group">
           <label>Username</label>
-          <input type="text" id="signInUsername" placeholder="e.g. gennie" required autocomplete="username" />
+          <input type="text" id="signInUsername" name="username" placeholder="e.g. gennie" required autocomplete="username" />
         </div>
         <div class="form-group">
           <label>Password</label>
-          <input type="password" id="signInPassword" placeholder="••••••••" required autocomplete="current-password" />
+          <input type="password" id="signInPassword" name="password" placeholder="••••••••" required autocomplete="current-password" />
         </div>
         <div style="display:flex; justify-content:space-between; align-items:center; margin-top:1.5rem;">
           <button type="button" class="btn btn-secondary" onclick="closeAuthModal()">Cancel</button>
@@ -13562,15 +13592,15 @@
       <form id="authRegisterForm" style="display:none;" onsubmit="submitAuthRegister(event)">
         <div class="form-group">
           <label>Username</label>
-          <input type="text" id="regUsername" placeholder="e.g. gennie" required minlength="3" autocomplete="username" />
+          <input type="text" id="regUsername" name="username" placeholder="e.g. gennie" required minlength="3" autocomplete="username" />
         </div>
         <div class="form-group">
           <label>Display Name <span class="hint">(optional)</span></label>
-          <input type="text" id="regDisplayName" placeholder="e.g. Gennie" />
+          <input type="text" id="regDisplayName" name="display_name" placeholder="e.g. Gennie" />
         </div>
         <div class="form-group">
           <label>Password</label>
-          <input type="password" id="regPassword" placeholder="At least 4 characters" required minlength="4" autocomplete="new-password" />
+          <input type="password" id="regPassword" name="new-password" placeholder="At least 4 characters" required minlength="4" autocomplete="new-password" />
         </div>
         <div id="regRoleNotice" style="font-size:0.74rem; color:var(--text-muted); margin-bottom:1rem; line-height:1.4;">
           📖 Subsequent accounts are registered as <strong>Readers</strong> (can browse, read, listen, and upload, but cannot delete books/files).
@@ -13629,17 +13659,17 @@
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem; margin-bottom:0.75rem;">
             <div class="form-group" style="margin:0;">
               <label>Username</label>
-              <input type="text" id="adminNewUsername" placeholder="e.g. friend_reader" required minlength="3" />
+              <input type="text" id="adminNewUsername" name="new_username" placeholder="e.g. friend_reader" required minlength="3" autocomplete="off" />
             </div>
             <div class="form-group" style="margin:0;">
               <label>Display Name</label>
-              <input type="text" id="adminNewDisplayName" placeholder="e.g. Sarah" />
+              <input type="text" id="adminNewDisplayName" name="new_display_name" placeholder="e.g. Sarah" />
             </div>
           </div>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem; margin-bottom:1rem;">
             <div class="form-group" style="margin:0;">
               <label>Password</label>
-              <input type="password" id="adminNewPassword" placeholder="At least 4 characters" required minlength="4" />
+              <input type="password" id="adminNewPassword" name="new_password" placeholder="At least 4 characters" required minlength="4" autocomplete="new-password" />
             </div>
             <div class="form-group" style="margin:0;">
               <label>Role</label>
