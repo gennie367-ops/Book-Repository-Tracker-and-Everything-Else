@@ -6294,32 +6294,71 @@
       `;
     }
 
+    let backendLoadError = false;
+
+    function renderBackendErrorState() {
+      const container = document.getElementById("bookContainer");
+      if (!container) return;
+      const isGitHubPages = window.location.hostname.includes("github.io");
+      container.innerHTML = `
+        <div class="empty-state" style="max-width:680px; margin:3rem auto; text-align:center; padding:2.5rem; background:var(--card-bg, rgba(255,255,255,0.03)); border:1px solid rgba(239,68,68,0.25); border-radius:16px;">
+          <div style="font-size:3rem; margin-bottom:1rem;">⚠️</div>
+          <h2 style="color:#f87171; margin-bottom:0.75rem;">Cannot Connect to Library Backend</h2>
+          <p style="color:#cbd5e1; font-size:0.95rem; line-height:1.6; margin-bottom:1.25rem;">
+            ${isGitHubPages
+              ? "You are currently viewing this site on <strong>GitHub Pages</strong>. GitHub Pages only serves static web files and cannot run the Python / SQLite backend where your books, audiobooks, and database are hosted.<br><br>👉 Please access your app at your server address: <strong>http://localhost:8000</strong> on your computer, or your <strong>ZimaOS / CasaOS IP address</strong> (e.g. <code>http://&lt;zimaos-ip&gt;:8000</code>)."
+              : "Unable to reach the backend API at <code>/books</code>. Please verify that your Python server or ZimaOS Docker container is running."}
+          </p>
+          <div style="display:flex; justify-content:center; gap:0.75rem; flex-wrap:wrap;">
+            <button class="btn btn-primary" onclick="loadBooks()">🔄 Retry Connection</button>
+            ${isGitHubPages ? '<a class="btn btn-secondary" href="http://localhost:8000" target="_blank">Open Local Server (localhost:8000)</a>' : ''}
+          </div>
+        </div>
+      `;
+    }
+
     function switchView(viewName, subFilter = null) {
       currentView = viewName;
       activeSubFilter = subFilter;
-      inViewFilterText = "";
 
-      // Default format filter per view
+      // Clear search keywords when switching views so old searches don't zero out shelves
+      if (!subFilter) {
+        mainSearchQuery = "";
+        const mainInput = document.getElementById("mainSearchInput");
+        if (mainInput) mainInput.value = "";
+      }
+      inViewFilterText = "";
+      const inViewInput = document.getElementById("inViewSearchInput");
+      if (inViewInput) inViewInput.value = "";
+
+      // Reset secondary toolbar filters on view switch so lingering filters do not zero out shelves:
+      filterAuthor = "all";
+      filterSeries = "all";
+      filterRating = "all";
+      filterSpice = "all";
+
+      // Format filter default
       if (viewName === "ebooks") {
         filterFormat = "ebook";
       } else if (viewName === "audiobooks") {
         filterFormat = "audiobook";
-      } else if (viewName === "all") {
+      } else {
         filterFormat = "all";
       }
 
-      // Default status filter per view
+      // Status filter default
       if (viewName === "read") {
         filterStatus = "read";
       } else if (viewName === "reading") {
         filterStatus = "reading";
-      } else if (viewName === "all" || viewName === "ebooks" || viewName === "audiobooks") {
+      } else {
         filterStatus = "all";
       }
 
+      // Availability / File filter default
       if (viewName === "wishlist") {
         filterFile = "no_file";
-      } else if (viewName === "all") {
+      } else {
         filterFile = "all";
       }
 
@@ -6336,12 +6375,16 @@
     async function loadBooks(query = "") {
       try {
         const res = await fetch("/books");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         allBooks = data.books || [];
+        backendLoadError = false;
         updateSidebarCounts();
         renderCurrentView();
       } catch (err) {
-        console.error(err);
+        console.error("Failed to load books:", err);
+        backendLoadError = true;
+        renderBackendErrorState();
       }
     }
 
@@ -6396,13 +6439,18 @@
     }
 
     function renderCurrentView() {
+      if (backendLoadError && allBooks.length === 0) {
+        renderBackendErrorState();
+        return;
+      }
+
       const subBar = document.getElementById("subFilterBar");
       if (subBar) {
         subBar.style.display = "none";
         subBar.innerHTML = "";
       }
 
-      renderToolbar();
+      renderToolbar(true);
 
       if (currentView === "authors" && !activeSubFilter) {
         renderAuthorsView();
@@ -6846,12 +6894,18 @@
       const container = document.getElementById("bookContainer");
       if (!books.length) {
         const defaultFormat = (currentView === "ebooks" ? "ebook" : (currentView === "audiobooks" ? "audiobook" : "all"));
-        const defaultStatus = (currentView === "read" ? "read" : "all");
+        const defaultStatus = (currentView === "read" ? "read" : (currentView === "reading" ? "reading" : "all"));
+        const defaultFile = (currentView === "wishlist" ? "no_file" : "all");
         const hasActiveFilters = (
-          (filterFormat !== defaultFormat && ["all", "tbr", "read"].includes(currentView)) ||
-          (filterStatus !== defaultStatus && ["all", "ebooks", "audiobooks"].includes(currentView)) ||
+          (filterFormat !== defaultFormat && filterFormat !== "all") ||
+          (filterStatus !== defaultStatus && filterStatus !== "all") ||
+          (filterFile !== defaultFile && filterFile !== "all") ||
           filterRating !== "all" ||
-          inViewFilterText.trim().length > 0
+          filterSpice !== "all" ||
+          filterAuthor !== "all" ||
+          filterSeries !== "all" ||
+          inViewFilterText.trim().length > 0 ||
+          mainSearchQuery.trim().length > 0
         );
 
         if (hasActiveFilters) {
