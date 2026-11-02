@@ -2308,8 +2308,9 @@
     gap: 0.25rem;
     animation: menuFade 0.15s ease-out;
   }
-  .menu-dropdown-pane.show {
-    display: flex;
+  .menu-dropdown-pane.show,
+  .menu-dropdown-pane.open {
+    display: flex !important;
   }
   @keyframes menuFade {
     from { opacity: 0; transform: translateY(-6px); }
@@ -3908,7 +3909,7 @@
 
         <!-- User Account Menu -->
         <div class="menu-dropdown-wrapper" id="userMenuWrapper">
-          <button class="btn btn-secondary menu-dropdown-btn" id="userMenuBtn" onclick="toggleUserDropdown(event)" style="display:inline-flex; align-items:center; gap:0.4rem; font-weight:700;">
+          <button class="btn btn-secondary menu-dropdown-btn" id="userMenuBtn" onclick="handleUserBtnClick(event)" style="display:inline-flex; align-items:center; gap:0.4rem; font-weight:700;">
             <span id="userBtnIcon" style="font-size:1.1rem;">👤</span>
             <span id="userBtnLabel">Sign In</span>
             <span id="userRoleBadge" style="display:none; font-size:0.62rem; padding:0.12rem 0.4rem; border-radius:4px; font-weight:800; text-transform:uppercase;"></span>
@@ -12883,15 +12884,32 @@
       const roleBadge = document.getElementById("userRoleBadge");
       const pane = document.getElementById("userDropdownPane");
 
+      const menuBtn = document.getElementById("userMenuBtn");
+      const arrow = document.getElementById("userMenuArrow");
+
       if (!authStatus.logged_in || !currentUser) {
         if (!authStatus.has_users) {
           btnIcon.textContent = "👑";
           btnLabel.textContent = "Setup Admin";
           roleBadge.style.display = "none";
+          if (menuBtn) {
+            menuBtn.style.border = "1px solid #f59e0b";
+            menuBtn.style.boxShadow = "0 0 12px rgba(245, 158, 11, 0.35)";
+            menuBtn.style.color = "#fef3c7";
+            menuBtn.title = "Click to set up Library Administrator";
+          }
+          if (arrow) arrow.style.display = "none";
         } else {
           btnIcon.textContent = "👤";
           btnLabel.textContent = "Sign In";
           roleBadge.style.display = "none";
+          if (menuBtn) {
+            menuBtn.style.border = "";
+            menuBtn.style.boxShadow = "";
+            menuBtn.style.color = "";
+            menuBtn.title = "Click to sign in";
+          }
+          if (arrow) arrow.style.display = "none";
         }
 
         pane.innerHTML = `
@@ -12916,6 +12934,14 @@
         const isAdmin = currentUser.role === "admin";
         btnIcon.textContent = isAdmin ? "👑" : "📖";
         btnLabel.textContent = escapeHtml(currentUser.display_name || currentUser.username);
+        
+        if (menuBtn) {
+          menuBtn.style.border = "";
+          menuBtn.style.boxShadow = "";
+          menuBtn.style.color = "";
+          menuBtn.title = `Signed in as ${escapeHtml(currentUser.display_name || currentUser.username)} (${isAdmin ? 'Admin' : 'Reader'})`;
+        }
+        if (arrow) arrow.style.display = "inline-block";
         
         roleBadge.style.display = "inline-block";
         roleBadge.textContent = isAdmin ? "ADMIN" : "READER";
@@ -12977,25 +13003,42 @@
       }
     }
 
+    function handleUserBtnClick(event) {
+      if (event) event.stopPropagation();
+      if (!authStatus.logged_in || !currentUser) {
+        // Direct one-click open for Setup Admin or Sign In
+        openAuthModal(!authStatus.has_users ? 'register' : 'signin');
+      } else {
+        // Toggle user dropdown when logged in
+        toggleUserDropdown(event);
+      }
+    }
+
     function toggleUserDropdown(event) {
-      event.stopPropagation();
+      if (event) event.stopPropagation();
       closeMenuDropdown();
       const pane = document.getElementById("userDropdownPane");
       const arrow = document.getElementById("userMenuArrow");
-      const isOpen = pane.classList.contains("open");
+      if (!pane) return;
+      const isOpen = pane.classList.contains("show") || pane.classList.contains("open");
       if (isOpen) {
+        pane.classList.remove("show");
         pane.classList.remove("open");
-        arrow.style.transform = "rotate(0deg)";
+        if (arrow) arrow.style.transform = "rotate(0deg)";
       } else {
+        pane.classList.add("show");
         pane.classList.add("open");
-        arrow.style.transform = "rotate(180deg)";
+        if (arrow) arrow.style.transform = "rotate(180deg)";
       }
     }
 
     function closeUserDropdown() {
       const pane = document.getElementById("userDropdownPane");
       const arrow = document.getElementById("userMenuArrow");
-      if (pane) pane.classList.remove("open");
+      if (pane) {
+        pane.classList.remove("show");
+        pane.classList.remove("open");
+      }
       if (arrow) arrow.style.transform = "rotate(0deg)";
     }
 
