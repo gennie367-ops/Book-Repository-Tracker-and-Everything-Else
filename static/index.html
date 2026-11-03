@@ -5975,6 +5975,29 @@
   <div class="toast" id="toast"></div>
 
   <script>
+    // Global fetch interceptor to attach Bearer token for iframe/cross-origin/ZimaOS compatibility
+    (function() {
+      const _origFetch = window.fetch;
+      window.fetch = function(url, options = {}) {
+        options = options || {};
+        const token = localStorage.getItem("book_app_session_token");
+        if (token && typeof url === "string" && !url.startsWith("http://") && !url.startsWith("https://")) {
+          options.headers = options.headers || {};
+          if (options.headers instanceof Headers) {
+            if (!options.headers.has("Authorization")) {
+              options.headers.set("Authorization", "Bearer " + token);
+            }
+          } else if (Array.isArray(options.headers)) {
+            options.headers.push(["Authorization", "Bearer " + token]);
+          } else {
+            if (!options.headers["Authorization"]) {
+              options.headers["Authorization"] = "Bearer " + token;
+            }
+          }
+        }
+        return _origFetch.call(this, url, options);
+      };
+    })();
 
     // --- TOP-RIGHT TOOLS DROPDOWN ---
     
@@ -13137,6 +13160,9 @@
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || "Invalid login credentials");
+        if (data.token) {
+          localStorage.setItem("book_app_session_token", data.token);
+        }
         hideLoginGate();
         showToast(data.message || `Welcome back, ${data.user.display_name}! ✨`);
         await checkAuthStatus();
@@ -13167,6 +13193,9 @@
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || "Registration failed");
+        if (data.token) {
+          localStorage.setItem("book_app_session_token", data.token);
+        }
         hideLoginGate();
         showToast(data.message || "Account created! ✨");
         await checkAuthStatus();
@@ -13443,6 +13472,7 @@
 
     async function submitAuthLogout() {
       try {
+        localStorage.removeItem("book_app_session_token");
         await fetch("/auth/logout", { method: "POST" });
         showToast("Signed out successfully.");
         allBooks = [];
