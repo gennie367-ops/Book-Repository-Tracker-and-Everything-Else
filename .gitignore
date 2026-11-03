@@ -7,8 +7,9 @@ __pycache__/
 venv/
 ENV/
 
-# Databases & backups (store locally or mount on server volume)
+# Databases & backups (store locally or mount on server volume, except seed_library.db)
 *.db
+!seed_library.db
 *.db-*
 *.sqlite
 *.sqlite3
@@ -16,8 +17,6 @@ ENV/
 # Audiobooks and ebooks storage (large files over GitHub 100MB limit)
 books_storage/
 import_inbox/
-static/covers/*
-!static/covers/.gitkeep
 
 # Scratch and log files
 scratch/

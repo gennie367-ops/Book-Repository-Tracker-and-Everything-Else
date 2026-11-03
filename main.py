@@ -275,7 +275,7 @@ def init_db():
                 legacy_badge_unlocks[bid] = un
         except Exception:
             pass
-        cursor.execute("DROP TABLE user_achievements")
+        cursor.execute("DROP TABLE IF EXISTS user_achievements")
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS user_achievements (
                 user_id INTEGER NOT NULL,
@@ -440,11 +440,118 @@ def init_db():
             gennie_uid = cursor.lastrowid
             seed_user_badges(conn, gennie_uid)
     else:
+        gennie_uid = gennie_row[0]
         cursor.execute('''
             UPDATE users
             SET password_hash = ?, salt = ?, role = 'admin'
             WHERE id = ?
-        ''', (p_hash, salt, gennie_row[0]))
+        ''', (p_hash, salt, gennie_uid))
+
+    # Automatically seed books, reading state, logs, and covers into persistent DATA_DIR
+    # (e.g., on ZimaOS / Docker) if the target library.db currently has 0 books.
+    seed_db_path = os.path.join(BASE_DIR, "seed_library.db")
+    if os.path.exists(seed_db_path) and os.path.abspath(seed_db_path) != os.path.abspath(DB_FILE):
+        cursor.execute("SELECT COUNT(*) FROM books")
+        current_book_count = cursor.fetchone()[0]
+        if current_book_count == 0:
+            try:
+                seed_conn = sqlite3.connect(seed_db_path)
+                seed_cur = seed_conn.cursor()
+
+                # 1. Copy books table
+                seed_cur.execute("PRAGMA table_info(books)")
+                seed_book_cols = [r[1] for r in seed_cur.fetchall()]
+                cursor.execute("PRAGMA table_info(books)")
+                dest_book_cols = {r[1] for r in cursor.fetchall()}
+                common_cols = [c for c in seed_book_cols if c in dest_book_cols]
+                if common_cols:
+                    cols_sql = ", ".join(common_cols)
+                    placeholders = ", ".join(["?"] * len(common_cols))
+                    seed_cur.execute(f"SELECT {cols_sql} FROM books")
+                    book_rows = seed_cur.fetchall()
+                    if book_rows:
+                        cursor.executemany(
+                            f"INSERT OR IGNORE INTO books ({cols_sql}) VALUES ({placeholders})",
+                            book_rows,
+                        )
+
+                # 2. Copy any secondary reader accounts (e.g. Sammy)
+                seed_cur.execute("SELECT username, password_hash, salt, display_name, role, theme_preference, custom_themes FROM users")
+                for su in seed_cur.fetchall():
+                    s_uname = su[0]
+                    cursor.execute("SELECT id FROM users WHERE LOWER(username) = LOWER(?)", (s_uname,))
+                    if not cursor.fetchone():
+                        cursor.execute(
+                            """
+                            INSERT INTO users (username, password_hash, salt, display_name, role, theme_preference, custom_themes)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                            """,
+                            su,
+                        )
+                        new_uid = cursor.lastrowid
+                        seed_user_badges(conn, new_uid)
+
+                # 3. Copy gennie's user_book_state & reading_logs mapped to gennie_uid
+                seed_cur.execute("SELECT id FROM users WHERE LOWER(username) IN ('gennie', 'gennie367') OR role = 'admin' ORDER BY id ASC LIMIT 1")
+                seed_admin_row = seed_cur.fetchone()
+                seed_admin_uid = seed_admin_row[0] if seed_admin_row else 4
+
+                seed_cur.execute(
+                    """
+                    SELECT book_id, is_read, reading_status, rating, review, date_read,
+                           review_headline, favorite_quotes, favorite_characters, pace,
+                           current_page, progress_percent, current_audio_minutes
+                    FROM user_book_state
+                    WHERE user_id = ?
+                    """,
+                    (seed_admin_uid,),
+                )
+                for ubs in seed_cur.fetchall():
+                    cursor.execute(
+                        """
+                        INSERT OR IGNORE INTO user_book_state
+                            (user_id, book_id, is_read, reading_status, rating, review, date_read,
+                             review_headline, favorite_quotes, favorite_characters, pace,
+                             current_page, progress_percent, current_audio_minutes)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (gennie_uid, *ubs),
+                    )
+
+                if cursor.execute("SELECT COUNT(*) FROM reading_logs").fetchone()[0] == 0:
+                    seed_cur.execute("SELECT book_id, date, pages_read, minutes_read, notes, created_at FROM reading_logs")
+                    for rl in seed_cur.fetchall():
+                        cursor.execute(
+                            """
+                            INSERT INTO reading_logs (book_id, date, pages_read, minutes_read, notes, created_at, user_id)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                            """,
+                            (*rl, gennie_uid),
+                        )
+
+                # 4. Copy non-secret app_settings
+                seed_cur.execute("SELECT key, value FROM app_settings")
+                for k, v in seed_cur.fetchall():
+                    cursor.execute("INSERT OR IGNORE INTO app_settings (key, value) VALUES (?, ?)", (k, v))
+
+                seed_conn.close()
+            except Exception as e:
+                print(f"Warning: seed_library.db import encountered an error: {e}")
+
+    # Copy bundled static/covers into persistent COVERS_DIR if running with DATA_DIR
+    bundled_covers_dir = os.path.join(STATIC_DIR, "covers")
+    if os.path.exists(bundled_covers_dir) and os.path.abspath(bundled_covers_dir) != os.path.abspath(COVERS_DIR):
+        try:
+            for fname in os.listdir(bundled_covers_dir):
+                if fname == ".gitkeep":
+                    continue
+                src_f = os.path.join(bundled_covers_dir, fname)
+                dst_f = os.path.join(COVERS_DIR, fname)
+                if os.path.isfile(src_f) and not os.path.exists(dst_f):
+                    with open(src_f, "rb") as rf, open(dst_f, "wb") as wf:
+                        wf.write(rf.read())
+        except Exception as e:
+            print(f"Warning: bundled covers copy encountered an error: {e}")
 
     conn.commit()
     conn.close()
