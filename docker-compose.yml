@@ -2,7 +2,7 @@ name: house-of-wind
 
 services:
   house-of-wind:
-    image: house-of-wind:latest
+    image: ghcr.io/gennie367-ops/book-repository-tracker-and-everything-else:latest
     build:
       context: .
       dockerfile: Dockerfile

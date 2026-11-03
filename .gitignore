@@ -7,9 +7,9 @@ __pycache__/
 venv/
 ENV/
 
-# Databases (store locally or mount on server)
-library.db
-books.db
+# Databases & backups (store locally or mount on server volume)
+*.db
+*.db-*
 *.sqlite
 *.sqlite3
 

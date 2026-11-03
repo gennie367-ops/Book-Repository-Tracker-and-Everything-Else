@@ -2296,6 +2296,8 @@
     top: calc(100% + 8px);
     right: 0;
     width: 300px;
+    max-height: calc(100vh - 96px);
+    overflow-y: auto;
     background: rgba(17, 24, 39, 0.97);
     backdrop-filter: blur(18px);
     border: 1px solid rgba(255, 255, 255, 0.12);
@@ -2308,8 +2310,9 @@
     gap: 0.25rem;
     animation: menuFade 0.15s ease-out;
   }
-  .menu-dropdown-pane.show {
-    display: flex;
+  .menu-dropdown-pane.show,
+  .menu-dropdown-pane.open {
+    display: flex !important;
   }
   @keyframes menuFade {
     from { opacity: 0; transform: translateY(-6px); }
@@ -2666,6 +2669,13 @@
       background: #090e1a !important;
       border: 1px solid rgba(255, 255, 255, 0.15) !important;
       color: #ffffff !important;
+    }
+    #searchInput::-webkit-search-decoration,
+    #searchInput::-webkit-search-cancel-button,
+    #searchInput::-webkit-search-results-button,
+    #searchInput::-webkit-search-results-decoration {
+      -webkit-appearance: none;
+      display: none;
     }
     .search-bar .search-icon {
       position: absolute;
@@ -3652,10 +3662,205 @@
       border-radius: 6px;
     }
 
+
+    /* AUTH & ROLE BADGES */
+    .role-badge-admin {
+      background: rgba(245, 158, 11, 0.2);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.4);
+    }
+    .role-badge-reader {
+      background: rgba(59, 130, 246, 0.2);
+      color: #60a5fa;
+      border: 1px solid rgba(59, 130, 246, 0.4);
+    }
+    .user-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0.5rem 0;
+      font-size: 0.85rem;
+    }
+    .user-table th {
+      text-align: left;
+      padding: 0.65rem 0.75rem;
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+    }
+    .user-table td {
+      padding: 0.65rem 0.75rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      color: var(--text);
+    }
+    .auth-tab-btn {
+      flex: 1;
+      padding: 0.65rem;
+      text-align: center;
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--text-muted);
+      font-weight: 700;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .auth-tab-btn.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+
 </style>
 <style id="dynamicCustomThemeStyle">/* Dynamic Custom User Themes Injected Here */</style>
+<style>
+  /* ---- FULL-PAGE LOGIN GATE ---- */
+  #loginGate {
+    position: fixed;
+    inset: 0;
+    z-index: 100000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    background: radial-gradient(circle at 30% 15%, #241a4d 0%, #120a24 45%, #05030d 100%);
+  }
+  #loginGate .login-gate-card {
+    width: 100%;
+    max-width: 420px;
+    background: rgba(17, 12, 34, 0.94);
+    border: 1px solid rgba(168, 85, 247, 0.35);
+    border-radius: 18px;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.75), 0 0 48px rgba(139, 92, 246, 0.18);
+    padding: 2rem 1.85rem;
+  }
+  #loginGate .login-gate-brand {
+    text-align: center;
+    margin-bottom: 1.35rem;
+  }
+  #loginGate .login-gate-icon {
+    font-size: 2.6rem;
+    line-height: 1;
+    margin-bottom: 0.5rem;
+  }
+  #loginGate .login-gate-brand h1 {
+    font-family: 'Cinzel', serif;
+    font-size: 1.55rem;
+    font-weight: 800;
+    margin: 0;
+    background: linear-gradient(135deg, #ffffff, #c084fc);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  #loginGate .login-gate-brand p {
+    margin: 0.4rem 0 0 0;
+    font-size: 0.82rem;
+    color: #a78bfa;
+  }
+  #loginGate .login-gate-label {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #c4b5fd;
+    margin: 0.85rem 0 0.35rem 0;
+  }
+  #loginGate .login-gate-input {
+    width: 100%;
+    padding: 0.62rem 0.8rem;
+    border-radius: 10px;
+    border: 1px solid rgba(168, 85, 247, 0.35);
+    background: rgba(0, 0, 0, 0.45);
+    color: #ffffff;
+    font-size: 0.92rem;
+    box-sizing: border-box;
+  }
+  #loginGate .login-gate-input:focus {
+    outline: none;
+    border-color: #a855f7;
+    box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.2);
+  }
+  #loginGate .login-gate-btn {
+    width: 100%;
+    margin-top: 1.25rem;
+    padding: 0.72rem 1rem;
+    border: none;
+    border-radius: 10px;
+    font-size: 0.95rem;
+    font-weight: 800;
+    color: #ffffff;
+    cursor: pointer;
+    background: linear-gradient(135deg, #8b5cf6, #ec4899);
+    box-shadow: 0 4px 18px rgba(139, 92, 246, 0.4);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  #loginGate .login-gate-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 26px rgba(139, 92, 246, 0.55);
+  }
+  #loginGate .login-gate-btn:disabled {
+    opacity: 0.7;
+    cursor: default;
+    transform: none;
+  }
+  #loginGate .login-gate-error {
+    min-height: 1rem;
+    margin-top: 0.7rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #fca5a5;
+    text-align: center;
+  }
+  #loginGate .login-gate-hint {
+    margin-top: 1rem;
+    font-size: 0.8rem;
+    color: #94a3b8;
+    text-align: center;
+  }
+  #loginGate .login-gate-hint a {
+    color: #c084fc;
+    font-weight: 700;
+    text-decoration: none;
+  }
+  #loginGate .login-gate-hint a:hover {
+    text-decoration: underline;
+  }
+</style>
 </head>
 <body>
+
+  <!-- FULL-PAGE LOGIN GATE (shown to signed-out visitors) -->
+  <div id="loginGate">
+    <div class="login-gate-card">
+      <div class="login-gate-brand">
+        <div class="login-gate-icon">🌌</div>
+        <h1>House of Wind</h1>
+        <p id="loginGateSubtitle">Sign in to enter your library</p>
+      </div>
+
+      <form id="loginGateSignInForm" onsubmit="submitLoginGateSignIn(event)">
+        <label class="login-gate-label" for="loginGateUsername">Username</label>
+        <input id="loginGateUsername" class="login-gate-input" type="text" autocomplete="username" required />
+        <label class="login-gate-label" for="loginGatePassword">Password</label>
+        <input id="loginGatePassword" class="login-gate-input" type="password" autocomplete="current-password" required />
+        <button type="submit" id="loginGateSignInBtn" class="login-gate-btn">Sign In ✨</button>
+        <div id="loginGateError" class="login-gate-error"></div>
+        <div class="login-gate-hint">Need an account? Ask the library administrator to create one for you.</div>
+      </form>
+
+      <form id="loginGateRegisterForm" onsubmit="submitLoginGateRegister(event)" style="display:none;">
+        <label class="login-gate-label" for="loginGateRegUsername">Username</label>
+        <input id="loginGateRegUsername" class="login-gate-input" type="text" autocomplete="username" required />
+        <label class="login-gate-label" for="loginGateRegDisplay">Display Name</label>
+        <input id="loginGateRegDisplay" class="login-gate-input" type="text" placeholder="e.g. Alex" />
+        <label class="login-gate-label" for="loginGateRegPassword">Password</label>
+        <input id="loginGateRegPassword" class="login-gate-input" type="password" autocomplete="new-password" required />
+        <button type="submit" id="loginGateRegisterBtn" class="login-gate-btn">Create Account ✨</button>
+        <div id="loginGateRegError" class="login-gate-error"></div>
+        <div class="login-gate-hint">Already have an account? <a href="#" onclick="switchLoginGate('signin'); return false;">Sign in</a></div>
+      </form>
+    </div>
+  </div>
 
   <!-- LEFT SIDEBAR NAVIGATION -->
   <aside class="sidebar">
@@ -3666,6 +3871,10 @@
         <span style="font-size:0.68rem; line-height:1.3; color:#a78bfa; font-style:italic; display:block; margin-top:0.2rem;">“Libraries were full of ideas—perhaps the most dangerous and powerful of all weapons.”</span>
       </div>
     </div>
+
+    <button class="nav-item" id="nav-surprise" onclick="openRandomTbrModal()" style="margin-bottom:0.85rem; background:linear-gradient(135deg, rgba(139,92,246,0.28), rgba(236,72,153,0.22)); border:1px solid rgba(168,85,247,0.45); font-weight:800; justify-content:center;">
+      <span class="nav-item-left">🎲 Surprise Me!</span>
+    </button>
 
     <div class="nav-section-title">Library Shelves</div>
     <div class="nav-list">
@@ -3678,11 +3887,11 @@
         <span class="nav-count" id="count-reading">0</span>
       </button>
       <button class="nav-item" id="nav-tbr" onclick="switchView('tbr')">
-        <span class="nav-item-left">🔖 TBR Shelf</span>
+        <span class="nav-item-left">🔖 TBR</span>
         <span class="nav-count" id="count-tbr">0</span>
       </button>
       <button class="nav-item" id="nav-ebooks" onclick="switchView('ebooks')">
-        <span class="nav-item-left">📖 Ebooks</span>
+        <span class="nav-item-left">📖 eBooks</span>
         <span class="nav-count" id="count-ebooks">0</span>
       </button>
       <button class="nav-item" id="nav-audiobooks" onclick="switchView('audiobooks')">
@@ -3690,49 +3899,31 @@
         <span class="nav-count" id="count-audiobooks">0</span>
       </button>
       <button class="nav-item" id="nav-wishlist" onclick="switchView('wishlist')">
-        <span class="nav-item-left">🎁 Wishlist (No File)</span>
+        <span class="nav-item-left">🎁 Wishlist</span>
         <span class="nav-count" id="count-wishlist">0</span>
       </button>
       <button class="nav-item" id="nav-read" onclick="switchView('read')">
-        <span class="nav-item-left">✅ Read / Finished</span>
+        <span class="nav-item-left">✅ Read</span>
         <span class="nav-count" id="count-read">0</span>
       </button>
-    </div>
-
-    <div class="nav-section-title">Discover & Insights</div>
-    <div class="nav-list">
-      <button class="nav-item" id="nav-stats" onclick="switchView('stats')">
-        <span class="nav-item-left">📊 Stats and Insights</span>
-      </button>
-      <button class="nav-item" id="nav-reviews" onclick="switchView('reviews')">
-        <span class="nav-item-left">💬 Reviews & Journal</span>
-        <span class="nav-count" id="count-reviews">0</span>
-      </button>
-      <button class="nav-item" id="nav-random" onclick="openRandomTbrModal()">
-        <span class="nav-item-left">🎲 Fates Oracle (Random Pick)</span>
-      </button>
-      <button class="nav-item" id="nav-timer" onclick="toggleReadingTimerDrawer()">
-        <span class="nav-item-left">⏱️ Reading Timer</span>
-        <span id="navTimerBadge" style="font-size:0.65rem; padding:0.1rem 0.4rem; border-radius:999px; background:rgba(16,185,129,0.25); border:1px solid #10b981; color:#6ee7b7; display:none;">RUNNING</span>
-      </button>
-    </div>
-
-    <div class="nav-section-title">Browse & Vault</div>
-    <div class="nav-list">
       <button class="nav-item" id="nav-series" onclick="switchView('series')">
-        <span class="nav-item-left">📖 Series Manager</span>
+        <span class="nav-item-left">📖 Series</span>
         <span class="nav-count" id="count-series">0</span>
       </button>
       <button class="nav-item" id="nav-authors" onclick="switchView('authors')">
         <span class="nav-item-left">✍️ Authors</span>
         <span class="nav-count" id="count-authors">0</span>
       </button>
-      <button class="nav-item" id="nav-trash" onclick="switchView('trash')">
-        <span class="nav-item-left">🗑️ 30-Day Trash Vault</span>
-        <span class="nav-count" id="count-trash" style="color:#f87171; font-weight:800;">0</span>
+    </div>
+
+    <div class="nav-section-title">Insights</div>
+    <div class="nav-list">
+      <button class="nav-item" id="nav-stats" onclick="switchView('stats')">
+        <span class="nav-item-left">📊 Reading Stats and Insights</span>
       </button>
-      <button class="nav-item" id="nav-themes" onclick="openThemePickerModal()">
-        <span class="nav-item-left">🎨 Themes & Colors</span>
+      <button class="nav-item" id="nav-reviews" onclick="switchView('reviews')">
+        <span class="nav-item-left">💬 Reviews</span>
+        <span class="nav-count" id="count-reviews">0</span>
       </button>
     </div>
 
@@ -3749,8 +3940,16 @@
       <div class="search-bar">
         <span class="search-icon">🔍</span>
         <input
-          type="text"
+          type="search"
           id="searchInput"
+          name="search_catalog"
+          autocomplete="off"
+          autocorrect="off"
+          autocapitalize="off"
+          spellcheck="false"
+          data-lpignore="true"
+          data-1p-ignore="true"
+          data-form-type="other"
           placeholder="Search title, author, narrator, series, or ISBN..."
           oninput="handleSearch(this.value)"
         />
@@ -3855,6 +4054,19 @@
                 <div class="menu-desc">Connect reader apps directly</div>
               </div>
             </a>
+          </div>
+        </div>
+
+        <!-- User Account Menu -->
+        <div class="menu-dropdown-wrapper" id="userMenuWrapper">
+          <button class="btn btn-secondary menu-dropdown-btn" id="userMenuBtn" onclick="handleUserBtnClick(event)" style="display:inline-flex; align-items:center; gap:0.4rem; font-weight:700;">
+            <span id="userBtnIcon" style="font-size:1.1rem;">👤</span>
+            <span id="userBtnLabel">Sign In</span>
+            <span id="userRoleBadge" style="display:none; font-size:0.62rem; padding:0.12rem 0.4rem; border-radius:4px; font-weight:800; text-transform:uppercase;"></span>
+            <span style="font-size:0.65rem; transition:transform 0.2s;" id="userMenuArrow">▼</span>
+          </button>
+          <div class="menu-dropdown-pane" id="userDropdownPane" style="right:0; min-width:240px;">
+            <!-- Rendered by renderUserMenu() -->
           </div>
         </div>
       </div>
@@ -4194,7 +4406,7 @@
             <select id="editStatus">
               <option value="unread">Unread</option>
               <option value="tbr">🔖 To Be Read (TBR)</option>
-              <option value="read">✅ Read / Finished</option>
+              <option value="read">✅ Read</option>
             </select>
           </div>
         </div>
@@ -4465,11 +4677,11 @@
         <div class="form-row">
           <div class="form-group">
             <label>Your Email Address / Username</label>
-            <input type="text" id="settingSmtpUser" placeholder="youremail@gmail.com" />
+            <input type="text" id="settingSmtpUser" name="smtp_user" placeholder="youremail@gmail.com" autocomplete="off" />
           </div>
           <div class="form-group">
             <label>App Password / Password</label>
-            <input type="password" id="settingSmtpPassword" placeholder="••••••••" />
+            <input type="password" id="settingSmtpPassword" name="smtp_pass" placeholder="••••••••" autocomplete="new-password" />
           </div>
         </div>
 
@@ -4588,7 +4800,7 @@
         <div style="margin: 0.85rem 0 1.25rem; display:flex; align-items:center; gap:0.5rem; background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.25); border-radius:8px; padding:0.65rem 0.85rem;">
           <input type="checkbox" id="reviewMarkAsReadCheck" style="width:16px; height:16px;" checked />
           <label for="reviewMarkAsReadCheck" style="margin:0; font-size:0.85rem; font-weight:600; color:#6ee7b7; cursor:pointer;">
-            Mark book as ✅ Read / Finished
+            Mark book as ✅ Read
           </label>
         </div>
 
@@ -4669,7 +4881,7 @@
               <label>Reading Shelf</label>
               <select id="importUrlReadingStatus">
                 <option value="tbr" selected>🔖 On TBR [Default]</option>
-                <option value="read">✅ Read / Finished</option>
+                <option value="read">✅ Read</option>
               </select>
             </div>
           </div>
@@ -4745,8 +4957,8 @@
         <div style="display:flex; align-items:center; gap:0.6rem;">
           <span style="font-size:1.6rem;">🔮</span>
           <div>
-            <h2 style="margin:0; font-size:1.25rem; font-family:'Cinzel', serif; letter-spacing:0.04em;">The Fates Oracle</h2>
-            <div style="font-size:0.75rem; color:#a78bfa;">Consult Reginald the Goose for your next literary destiny</div>
+            <h2 style="margin:0; font-size:1.25rem; font-family:'Cinzel', serif; letter-spacing:0.04em;">Surprise Me!</h2>
+            <div style="font-size:0.75rem; color:#a78bfa;">Let Reginald the Goose pick your next literary adventure</div>
           </div>
         </div>
         <button class="close-btn" onclick="closeRandomTbrModal()">×</button>
@@ -5863,11 +6075,11 @@
       audiobooks: { title: "🎧 Audiobooks Library", subtitle: "Audiobooks you own — stream in your browser or download to any device" },
       tbr: { title: "🔖 TBR Shelf", subtitle: "Your reading & listening wishlist — books and audiobooks you want to enjoy next" },
       wishlist: { title: "🎁 Wishlist (No File)", subtitle: "Books and audiobooks you want to acquire — search and find files easily" },
-      read: { title: "✅ Read / Finished", subtitle: "Books and audiobooks you have completed" },
+      read: { title: "✅ Read", subtitle: "Books and audiobooks you have completed" },
       authors: { title: "✍️ Authors", subtitle: "Browse your owned library grouped by author" },
       series: { title: "📖 Book Series", subtitle: "Browse your owned library organized in series order" },
-      reviews: { title: "💬 Reviews & Journal", subtitle: "Your personal book reviews, ratings, favorite quotes, and characters" },
-      stats: { title: "📊 Stats and Insights", subtitle: "Track your reading progress, pages read, hours listened, spice heat, and milestones" },
+      reviews: { title: "💬 Reviews", subtitle: "Your personal book reviews, ratings, favorite quotes, and characters" },
+      stats: { title: "📊 Reading Stats and Insights", subtitle: "Track your reading progress, pages read, hours listened, spice heat, and milestones" },
       trash: { title: "🗑️ 30-Day Trash Vault", subtitle: "Soft-deleted books remain safe here for 30 days before permanent deletion" }
     };
 
@@ -6232,32 +6444,71 @@
       `;
     }
 
+    let backendLoadError = false;
+
+    function renderBackendErrorState() {
+      const container = document.getElementById("bookContainer");
+      if (!container) return;
+      const isGitHubPages = window.location.hostname.includes("github.io");
+      container.innerHTML = `
+        <div class="empty-state" style="max-width:680px; margin:3rem auto; text-align:center; padding:2.5rem; background:var(--card-bg, rgba(255,255,255,0.03)); border:1px solid rgba(239,68,68,0.25); border-radius:16px;">
+          <div style="font-size:3rem; margin-bottom:1rem;">⚠️</div>
+          <h2 style="color:#f87171; margin-bottom:0.75rem;">Cannot Connect to Library Backend</h2>
+          <p style="color:#cbd5e1; font-size:0.95rem; line-height:1.6; margin-bottom:1.25rem;">
+            ${isGitHubPages
+              ? "You are currently viewing this site on <strong>GitHub Pages</strong>. GitHub Pages only serves static web files and cannot run the Python / SQLite backend where your books, audiobooks, and database are hosted.<br><br>👉 Please access your app at your server address: <strong>http://localhost:8000</strong> on your computer, or your <strong>ZimaOS / CasaOS IP address</strong> (e.g. <code>http://&lt;zimaos-ip&gt;:8000</code>)."
+              : "Unable to reach the backend API at <code>/books</code>. Please verify that your Python server or ZimaOS Docker container is running."}
+          </p>
+          <div style="display:flex; justify-content:center; gap:0.75rem; flex-wrap:wrap;">
+            <button class="btn btn-primary" onclick="loadBooks()">🔄 Retry Connection</button>
+            ${isGitHubPages ? '<a class="btn btn-secondary" href="http://localhost:8000" target="_blank">Open Local Server (localhost:8000)</a>' : ''}
+          </div>
+        </div>
+      `;
+    }
+
     function switchView(viewName, subFilter = null) {
       currentView = viewName;
       activeSubFilter = subFilter;
-      inViewFilterText = "";
 
-      // Default format filter per view
+      // Clear search keywords when switching views so old searches don't zero out shelves
+      if (!subFilter) {
+        mainSearchQuery = "";
+        const mainInput = document.getElementById("searchInput");
+        if (mainInput) mainInput.value = "";
+      }
+      inViewFilterText = "";
+      const inViewInput = document.getElementById("inViewSearchInput");
+      if (inViewInput) inViewInput.value = "";
+
+      // Reset secondary toolbar filters on view switch so lingering filters do not zero out shelves:
+      filterAuthor = "all";
+      filterSeries = "all";
+      filterRating = "all";
+      filterSpice = "all";
+
+      // Format filter default
       if (viewName === "ebooks") {
         filterFormat = "ebook";
       } else if (viewName === "audiobooks") {
         filterFormat = "audiobook";
-      } else if (viewName === "all") {
+      } else {
         filterFormat = "all";
       }
 
-      // Default status filter per view
+      // Status filter default
       if (viewName === "read") {
         filterStatus = "read";
       } else if (viewName === "reading") {
         filterStatus = "reading";
-      } else if (viewName === "all" || viewName === "ebooks" || viewName === "audiobooks") {
+      } else {
         filterStatus = "all";
       }
 
+      // Availability / File filter default
       if (viewName === "wishlist") {
         filterFile = "no_file";
-      } else if (viewName === "all") {
+      } else {
         filterFile = "all";
       }
 
@@ -6274,12 +6525,16 @@
     async function loadBooks(query = "") {
       try {
         const res = await fetch("/books");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         allBooks = data.books || [];
+        backendLoadError = false;
         updateSidebarCounts();
         renderCurrentView();
       } catch (err) {
-        console.error(err);
+        console.error("Failed to load books:", err);
+        backendLoadError = true;
+        renderBackendErrorState();
       }
     }
 
@@ -6334,13 +6589,18 @@
     }
 
     function renderCurrentView() {
+      if (backendLoadError && allBooks.length === 0) {
+        renderBackendErrorState();
+        return;
+      }
+
       const subBar = document.getElementById("subFilterBar");
       if (subBar) {
         subBar.style.display = "none";
         subBar.innerHTML = "";
       }
 
-      renderToolbar();
+      renderToolbar(true);
 
       if (currentView === "authors" && !activeSubFilter) {
         renderAuthorsView();
@@ -6734,7 +6994,7 @@
                 <span class="badge ${isAudio ? 'badge-audio' : 'badge-muted'}">${isAudio ? '🎧 Audiobook' : '📚 Ebook'}</span>
                 ${book.series_name ? `<span class="badge badge-series" onclick="switchView('series')" title="View series">📖 ${escapeHtml(book.series_name)}${book.series_number ? ` #${escapeHtml(book.series_number)}` : ''}</span>` : ''}
                 ${paceLabel ? `<span class="badge" style="background:rgba(99,102,241,0.18); color:#c7d2fe;">${paceLabel}</span>` : ''}
-                ${book.spice_rating > 0 ? `<span class="badge" style="background:rgba(239,68,68,0.22); border:1px solid rgba(239,68,68,0.5); color:#fca5a5; font-weight:800;">🌶️ Romance.io: ${'🌶️'.repeat(book.spice_rating)} (${book.spice_rating}/5)</span>` : ''}
+                ${book.spice_rating > 0 ? `<span class="badge" style="background:rgba(239,68,68,0.22); border:1px solid rgba(239,68,68,0.5); color:#fca5a5; font-weight:800;">Romance.io: ${'🌶️'.repeat(book.spice_rating)} (${book.spice_rating}/5)</span>` : ''}
               </div>
 
               <div class="book-title" style="font-size:1.15rem; cursor:pointer;" onclick="openBookDetailsModal(${book.id})" title="Click to view full book details">${escapeHtml(book.title)}</div>
@@ -6784,12 +7044,18 @@
       const container = document.getElementById("bookContainer");
       if (!books.length) {
         const defaultFormat = (currentView === "ebooks" ? "ebook" : (currentView === "audiobooks" ? "audiobook" : "all"));
-        const defaultStatus = (currentView === "read" ? "read" : "all");
+        const defaultStatus = (currentView === "read" ? "read" : (currentView === "reading" ? "reading" : "all"));
+        const defaultFile = (currentView === "wishlist" ? "no_file" : "all");
         const hasActiveFilters = (
-          (filterFormat !== defaultFormat && ["all", "tbr", "read"].includes(currentView)) ||
-          (filterStatus !== defaultStatus && ["all", "ebooks", "audiobooks"].includes(currentView)) ||
+          (filterFormat !== defaultFormat && filterFormat !== "all") ||
+          (filterStatus !== defaultStatus && filterStatus !== "all") ||
+          (filterFile !== defaultFile && filterFile !== "all") ||
           filterRating !== "all" ||
-          inViewFilterText.trim().length > 0
+          filterSpice !== "all" ||
+          filterAuthor !== "all" ||
+          filterSeries !== "all" ||
+          inViewFilterText.trim().length > 0 ||
+          mainSearchQuery.trim().length > 0
         );
 
         if (hasActiveFilters) {
@@ -6884,7 +7150,7 @@
                 </span>
                 ${book.spice_rating > 0 ? `
                   <span class="badge badge-spice" style="background:rgba(239,68,68,0.22); border:1px solid rgba(239,68,68,0.5); color:#fca5a5; font-weight:800;" title="Romance.io Spice Rating: ${book.spice_rating}/5 (${getSpiceLabel(book.spice_rating)})">
-                    🌶️ ${'🌶️'.repeat(book.spice_rating)} (${book.spice_rating}/5)
+                    ${'🌶️'.repeat(book.spice_rating)} (${book.spice_rating}/5)
                   </span>
                 ` : ''}
                 ${book.duration ? `<span class="badge badge-audio">⏱️ ${escapeHtml(book.duration)}</span>` : ""}
@@ -6893,7 +7159,7 @@
               </div>
               <div class="book-title" style="cursor:pointer;" onclick="openBookDetailsModal(${book.id})" title="Click to view full entry">${escapeHtml(book.title)}</div>
               <div class="book-author" onclick="switchView('authors', '${escapeHtml(book.author).replace(/'/g, "\'")}')">${escapeHtml(book.author)}</div>
-              ${book.narrator ? `<div class="book-narrator">🎙️ Narrated by ${escapeHtml(book.narrator)}</div>` : ""}
+              ${isAudio && book.narrator ? `<div class="book-narrator">🎙️ Narrated by ${escapeHtml(book.narrator)}</div>` : ""}
 
               <div class="stars-row" title="Click to rate 1–5 stars" style="display:flex; align-items:center; gap:2px;">
                 ${starsHtml}
@@ -8818,13 +9084,13 @@
             <span class="badge ${isAudio ? 'badge-audio' : 'badge-muted'}">${isAudio ? '🎧 Audiobook' : '📚 Ebook'}</span>
             ${b.spice_rating > 0 ? `
               <span class="badge" style="background:rgba(239, 68, 68, 0.25); border:1px solid rgba(239, 68, 68, 0.55); color:#fca5a5; font-weight:800; font-size:0.8rem; padding:0.22rem 0.65rem;" title="Official Romance.io Heat Rating">
-                🌶️ Romance.io: ${'🌶️'.repeat(b.spice_rating)} (${b.spice_rating}/5)
+                Romance.io: ${'🌶️'.repeat(b.spice_rating)} (${b.spice_rating}/5)
               </span>
             ` : ''}
             ${b.series_name
               ? `<span class="badge badge-series" style="cursor:pointer;" onclick="closeBookDetailsModal(); switchView('series')" title="View series">📖 ${escapeHtml(b.series_name)}${b.series_number ? ` #${escapeHtml(b.series_number)}` : ''}</span>`
               : ''}
-            ${b.narrator ? `<span class="badge badge-audio">🎙️ ${escapeHtml(b.narrator)}</span>` : ''}
+            ${isAudio && b.narrator ? `<span class="badge badge-audio">🎙️ ${escapeHtml(b.narrator)}</span>` : ''}
             ${b.duration ? `<span class="badge badge-audio">⏱️ ${escapeHtml(b.duration)}</span>` : ""}
             ${b.published_year ? `<span class="badge badge-muted">📅 ${escapeHtml(b.published_year)}</span>` : ''}
             ${b.isbn ? `<span class="badge badge-muted">ISBN: ${escapeHtml(b.isbn)}</span>` : ''}
@@ -8888,7 +9154,7 @@
             ${hasReview ? `
               <div style="display:flex; flex-wrap:wrap; gap:0.4rem; align-items:center; margin-bottom:0.6rem;">
                 ${b.rating > 0 ? `<span class="badge" style="background:#f59e0b; color:#0f172a; font-weight:700;">${b.rating} ★ Rating</span>` : ''}
-                ${b.spice_rating > 0 ? `<span class="spice-meter">🌶️ ${'🌶️'.repeat(b.spice_rating)} (${b.spice_rating}/5 Spice)</span>` : ''}
+                ${b.spice_rating > 0 ? `<span class="spice-meter">${'🌶️'.repeat(b.spice_rating)} (${b.spice_rating}/5 Spice)</span>` : ''}
                 ${paceLabel ? `<span class="badge" style="background:rgba(99,102,241,0.25); color:#c7d2fe;">${paceLabel}</span>` : ''}
               </div>
 
@@ -8926,7 +9192,11 @@
           <div style="display:flex; flex-wrap:wrap; gap:0.6rem; justify-content:flex-end; margin-top:1.25rem; padding-top:1rem; border-top:1px solid var(--border);">
             <button class="btn btn-secondary" onclick="closeBookDetailsModal(); openEditModal(${b.id})">✏️ Edit Metadata / Cover</button>
             ${b.has_file ? `<button class="btn btn-secondary" onclick="closeBookDetailsModal(); promptRename(${b.id}, '${escapeHtml(b.filename).replace(/'/g, "\\'")}')">🏷️ Rename File</button>` : ''}
-            <button class="btn btn-danger" onclick="closeBookDetailsModal(); confirmDelete(${b.id}, '${escapeHtml(b.title).replace(/'/g, "\\'")}')">🗑️ Delete</button>
+            ${(currentUser && currentUser.role === 'reader') ? `
+              <button class="btn btn-secondary" disabled style="opacity:0.5; cursor:not-allowed;" title="Reader accounts are not permitted to delete library books or files">🔒 Delete (Locked)</button>
+            ` : `
+              <button class="btn btn-danger" onclick="closeBookDetailsModal(); confirmDelete(${b.id}, '${escapeHtml(b.title).replace(/'/g, "\\'")}')">🗑️ Delete</button>
+            `}
             <button class="btn btn-secondary" onclick="closeBookDetailsModal()">✕ Close</button>
           </div>
         </div>
@@ -10527,7 +10797,7 @@
                 </div>
               </div>
 
-              ${trashBooks.length ? `
+              ${trashBooks.length && (!currentUser || currentUser.role !== 'reader') ? `
                 <button class="btn btn-danger btn-sm" onclick="emptyTrashVault()" style="font-weight:700;">
                   ⚠️ Empty Trash (Permanent)
                 </button>
@@ -10568,9 +10838,11 @@
                         <button class="btn btn-emerald btn-sm" onclick="restoreBook(${b.id})" style="flex:1; font-weight:700;">
                           ♻️ Restore
                         </button>
-                        <button class="btn btn-danger btn-sm" onclick="permanentDeleteBook(${b.id}, '${escapeHtml(b.title).replace(/'/g, "\\'")}')" style="font-weight:700;">
-                          🗑️ Purge
-                        </button>
+                        ${(!currentUser || currentUser.role !== 'reader') ? `
+                          <button class="btn btn-danger btn-sm" onclick="permanentDeleteBook(${b.id}, '${escapeHtml(b.title).replace(/'/g, "\\'")}')" style="font-weight:700;">
+                            🗑️ Purge
+                          </button>
+                        ` : ''}
                       </div>
                     </div>
                   `;
@@ -10611,6 +10883,10 @@
     }
 
     async function permanentDeleteBook(bookId, title) {
+      if (currentUser && currentUser.role === "reader") {
+        showToast("🔒 Permission Restricted: Reader accounts cannot delete library books or files.");
+        return;
+      }
       if (!confirm(`Are you sure you want to permanently delete "${title}"? This cannot be undone.`)) return;
       try {
         const res = await fetch(`/books/${bookId}?permanent=true`, { method: "DELETE" });
@@ -10932,7 +11208,7 @@
       document.getElementById("progModalAuthor").textContent = "by " + b.author;
 
       const isAudio = b.media_type === "audiobook";
-      const statusText = b.is_read ? "✅ Read / Finished" : (b.reading_status === "reading" ? "📖 Currently Reading" : "🔖 On TBR");
+      const statusText = b.is_read ? "✅ Read" : (b.reading_status === "reading" ? "📖 Currently Reading" : "🔖 On TBR");
       document.getElementById("progModalStatusBadge").innerHTML = `
         <span class="badge ${b.is_read ? 'badge-read' : (b.reading_status === 'reading' ? 'badge-audio' : 'badge-muted')}">
           ${statusText}
@@ -12785,8 +13061,579 @@
       }
     }
 
+
+    // ==========================================
+    // --- USER AUTHENTICATION & ACCESS CONTROL ---
+    // ==========================================
+    let currentUser = null;
+    let authStatus = { logged_in: false, has_users: false };
+
+    async function checkAuthStatus() {
+      try {
+        const res = await fetch("/auth/status");
+        if (res.ok) {
+          authStatus = await res.json();
+          currentUser = authStatus.user || null;
+          renderUserMenu();
+          updateRoleRestrictedUI();
+          if (!authStatus.logged_in) {
+            showLoginGate(authStatus.has_users ? "signin" : "register");
+          } else {
+            hideLoginGate();
+          }
+        }
+      } catch (err) {
+        console.warn("Auth status check failed", err);
+      }
+    }
+
+    // ---- Full-page login gate helpers ----
+    function showLoginGate(mode) {
+      const gate = document.getElementById("loginGate");
+      if (!gate) return;
+      const subtitle = document.getElementById("loginGateSubtitle");
+      if (!authStatus.has_users) {
+        mode = "register";
+        if (subtitle) subtitle.textContent = "Create the administrator account to get started";
+      } else if (subtitle) {
+        subtitle.textContent = "Sign in to enter your library";
+      }
+      switchLoginGate(mode);
+      gate.style.display = "flex";
+    }
+
+    function hideLoginGate() {
+      const gate = document.getElementById("loginGate");
+      if (gate) gate.style.display = "none";
+    }
+
+    function switchLoginGate(mode) {
+      const signIn = document.getElementById("loginGateSignInForm");
+      const register = document.getElementById("loginGateRegisterForm");
+      if (!signIn || !register) return;
+      if (mode === "register") {
+        signIn.style.display = "none";
+        register.style.display = "block";
+      } else {
+        signIn.style.display = "block";
+        register.style.display = "none";
+      }
+    }
+
+    async function submitLoginGateSignIn(event) {
+      event.preventDefault();
+      const u = document.getElementById("loginGateUsername").value.trim();
+      const p = document.getElementById("loginGatePassword").value;
+      const btn = document.getElementById("loginGateSignInBtn");
+      const errEl = document.getElementById("loginGateError");
+      errEl.textContent = "";
+      btn.disabled = true;
+      btn.textContent = "Signing In...";
+      try {
+        const res = await fetch("/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: u, password: p })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Invalid login credentials");
+        hideLoginGate();
+        showToast(data.message || `Welcome back, ${data.user.display_name}! ✨`);
+        await checkAuthStatus();
+        await loadBooks();
+      } catch (err) {
+        errEl.textContent = err.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Sign In ✨";
+      }
+    }
+
+    async function submitLoginGateRegister(event) {
+      event.preventDefault();
+      const u = document.getElementById("loginGateRegUsername").value.trim();
+      const d = document.getElementById("loginGateRegDisplay").value.trim();
+      const p = document.getElementById("loginGateRegPassword").value;
+      const btn = document.getElementById("loginGateRegisterBtn");
+      const errEl = document.getElementById("loginGateRegError");
+      errEl.textContent = "";
+      btn.disabled = true;
+      btn.textContent = "Creating Account...";
+      try {
+        const res = await fetch("/auth/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: u, display_name: d, password: p })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Registration failed");
+        hideLoginGate();
+        showToast(data.message || "Account created! ✨");
+        await checkAuthStatus();
+        await loadBooks();
+      } catch (err) {
+        errEl.textContent = err.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Create Account ✨";
+      }
+    }
+
+    function renderUserMenu() {
+      const btnIcon = document.getElementById("userBtnIcon");
+      const btnLabel = document.getElementById("userBtnLabel");
+      const roleBadge = document.getElementById("userRoleBadge");
+      const pane = document.getElementById("userDropdownPane");
+
+      const menuBtn = document.getElementById("userMenuBtn");
+      const arrow = document.getElementById("userMenuArrow");
+
+      if (!authStatus.logged_in || !currentUser) {
+        if (!authStatus.has_users) {
+          btnIcon.textContent = "👑";
+          btnLabel.textContent = "Setup Admin";
+          roleBadge.style.display = "none";
+          if (menuBtn) {
+            menuBtn.style.border = "1px solid #f59e0b";
+            menuBtn.style.boxShadow = "0 0 12px rgba(245, 158, 11, 0.35)";
+            menuBtn.style.color = "#fef3c7";
+            menuBtn.title = "Click to set up Library Administrator";
+          }
+          if (arrow) arrow.style.display = "none";
+        } else {
+          btnIcon.textContent = "👤";
+          btnLabel.textContent = "Sign In";
+          roleBadge.style.display = "none";
+          if (menuBtn) {
+            menuBtn.style.border = "";
+            menuBtn.style.boxShadow = "";
+            menuBtn.style.color = "";
+            menuBtn.title = "Click to sign in";
+          }
+          if (arrow) arrow.style.display = "none";
+        }
+
+        pane.innerHTML = `
+          <div class="menu-dropdown-header">${!authStatus.has_users ? 'Library First Setup' : 'Library Sign In'}</div>
+          <div style="padding:0.75rem 0.85rem; font-size:0.8rem; color:var(--text-muted); line-height:1.4;">
+            ${!authStatus.has_users 
+              ? 'Welcome! Create your primary <strong>Administrator</strong> account to secure deletions.' 
+              : 'Sign in to access your library role and personalized themes. New accounts must be created by the administrator.'}
+          </div>
+          <div style="padding:0 0.85rem 0.85rem 0.85rem; display:flex; gap:0.5rem;">
+            <button class="btn btn-primary btn-sm" style="flex:1; font-weight:700;" onclick="openAuthModal('${!authStatus.has_users ? 'register' : 'signin'}'); closeUserDropdown();">
+              ${!authStatus.has_users ? '👑 Create Admin' : '🔐 Sign In'}
+            </button>
+          </div>
+        `;
+      } else {
+        const isAdmin = currentUser.role === "admin";
+        btnIcon.textContent = isAdmin ? "👑" : "📖";
+        btnLabel.textContent = escapeHtml(currentUser.display_name || currentUser.username);
+        
+        if (menuBtn) {
+          menuBtn.style.border = "";
+          menuBtn.style.boxShadow = "";
+          menuBtn.style.color = "";
+          menuBtn.title = `Signed in as ${escapeHtml(currentUser.display_name || currentUser.username)} (${isAdmin ? 'Admin' : 'Reader'})`;
+        }
+        if (arrow) arrow.style.display = "inline-block";
+        
+        roleBadge.style.display = "inline-block";
+        roleBadge.textContent = isAdmin ? "ADMIN" : "READER";
+        roleBadge.className = isAdmin ? "role-badge-admin" : "role-badge-reader";
+
+        pane.innerHTML = `
+          <div class="menu-dropdown-header" style="display:flex; justify-content:space-between; align-items:center;">
+            <span>${escapeHtml(currentUser.display_name || currentUser.username)}</span>
+            <span class="${isAdmin ? 'role-badge-admin' : 'role-badge-reader'}" style="font-size:0.62rem; padding:0.1rem 0.4rem; border-radius:4px; font-weight:800;">
+              ${isAdmin ? '👑 ADMIN' : '📖 READER'}
+            </span>
+          </div>
+
+          <div style="padding:0.5rem 0.85rem; font-size:0.75rem; color:var(--text-muted); border-bottom:1px solid var(--border);">
+            ${isAdmin 
+              ? 'Full Owner Access (Upload, edit, & delete)' 
+              : 'Reader Access (Browse, read, & upload — deletion locked)'}
+          </div>
+
+          ${isAdmin ? `
+            <button class="menu-dropdown-item" onclick="openUserManagementModal(); closeUserDropdown();">
+              <span class="menu-icon">👥</span>
+              <div>
+                <div class="menu-title">User Accounts & Roles</div>
+                <div class="menu-desc">Manage reader accounts and permissions</div>
+              </div>
+            </button>
+          ` : ''}
+
+          <button class="menu-dropdown-item" onclick="openThemePickerModal(); closeUserDropdown();">
+            <span class="menu-icon">🎨</span>
+            <div>
+              <div class="menu-title">Themes & Aesthetics</div>
+              <div class="menu-desc">Customize your reading ambiance</div>
+            </div>
+          </button>
+
+          <div class="menu-dropdown-divider"></div>
+
+          <button class="menu-dropdown-item" onclick="submitAuthLogout(); closeUserDropdown();" style="color:#fca5a5;">
+            <span class="menu-icon">🚪</span>
+            <div>
+              <div class="menu-title" style="color:#fca5a5;">Sign Out</div>
+              <div class="menu-desc">Switch accounts or exit</div>
+            </div>
+          </button>
+        `;
+      }
+    }
+
+    function updateRoleRestrictedUI() {
+      // If book details modal is open, re-render its footer to refresh delete button state
+      if (currentDetailsBookId && allBooks.length) {
+        const b = allBooks.find(x => x.id === currentDetailsBookId);
+        if (b) openBookDetailsModal(b.id);
+      }
+      if (currentView === "trash") {
+        renderTrashView();
+      }
+    }
+
+    function handleUserBtnClick(event) {
+      if (event) event.stopPropagation();
+      if (!authStatus.logged_in || !currentUser) {
+        // Direct one-click open for Setup Admin or Sign In
+        openAuthModal(!authStatus.has_users ? 'register' : 'signin');
+      } else {
+        // Toggle user dropdown when logged in
+        toggleUserDropdown(event);
+      }
+    }
+
+    function toggleUserDropdown(event) {
+      if (event) event.stopPropagation();
+      closeMenuDropdown();
+      const pane = document.getElementById("userDropdownPane");
+      const arrow = document.getElementById("userMenuArrow");
+      if (!pane) return;
+      const isOpen = pane.classList.contains("show") || pane.classList.contains("open");
+      if (isOpen) {
+        pane.classList.remove("show");
+        pane.classList.remove("open");
+        if (arrow) arrow.style.transform = "rotate(0deg)";
+      } else {
+        pane.classList.add("show");
+        pane.classList.add("open");
+        if (arrow) arrow.style.transform = "rotate(180deg)";
+      }
+    }
+
+    function closeUserDropdown() {
+      const pane = document.getElementById("userDropdownPane");
+      const arrow = document.getElementById("userMenuArrow");
+      if (pane) {
+        pane.classList.remove("show");
+        pane.classList.remove("open");
+      }
+      if (arrow) arrow.style.transform = "rotate(0deg)";
+    }
+
+    function openAuthModal(tab = 'signin') {
+      const modal = document.getElementById("authModal");
+      const firstNotice = document.getElementById("firstUserNoticeBanner");
+      const regTabBtn = document.getElementById("authTabBtnRegister");
+      if (!authStatus.has_users) {
+        tab = 'register';
+        firstNotice.style.display = "block";
+        if (regTabBtn) regTabBtn.style.display = "block";
+      } else {
+        firstNotice.style.display = "none";
+        // Self-registration is disabled once accounts exist. Only admins create accounts.
+        if (regTabBtn) regTabBtn.style.display = "none";
+        if (tab === 'register') tab = 'signin';
+      }
+      switchAuthTab(tab);
+      modal.classList.add("open");
+    }
+
+    function closeAuthModal() {
+      document.getElementById("authModal").classList.remove("open");
+    }
+
+    function switchAuthTab(tab) {
+      const btnSign = document.getElementById("authTabBtnSignIn");
+      const btnReg = document.getElementById("authTabBtnRegister");
+      const formSign = document.getElementById("authSignInForm");
+      const formReg = document.getElementById("authRegisterForm");
+      const title = document.getElementById("authModalTitle");
+
+      if (tab === 'register') {
+        btnSign.classList.remove("active");
+        btnReg.classList.add("active");
+        formSign.style.display = "none";
+        formReg.style.display = "block";
+        title.textContent = !authStatus.has_users ? "👑 Create Administrator Account" : "Create Reader Account";
+      } else {
+        btnSign.classList.add("active");
+        btnReg.classList.remove("active");
+        formSign.style.display = "block";
+        formReg.style.display = "none";
+        title.textContent = "Sign In";
+      }
+    }
+
+    async function submitAuthSignIn(event) {
+      event.preventDefault();
+      const u = document.getElementById("signInUsername").value.trim();
+      const p = document.getElementById("signInPassword").value.trim();
+      const btn = document.getElementById("btnSubmitSignIn");
+
+      try {
+        btn.disabled = true;
+        btn.textContent = "Signing In...";
+        const res = await fetch("/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: u, password: p })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Invalid login credentials");
+
+        closeAuthModal();
+        showToast(data.message || `Welcome, ${data.user.display_name}! ✨`);
+        await checkAuthStatus();
+        await loadBooks();
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Sign In ✨";
+      }
+    }
+
+    async function submitAuthRegister(event) {
+      event.preventDefault();
+      const u = document.getElementById("regUsername").value.trim();
+      const d = document.getElementById("regDisplayName").value.trim();
+      const p = document.getElementById("regPassword").value.trim();
+      const btn = document.getElementById("btnSubmitRegister");
+
+      try {
+        btn.disabled = true;
+        btn.textContent = "Creating Account...";
+        const res = await fetch("/auth/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: u, display_name: d, password: p })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Registration failed");
+
+        closeAuthModal();
+        showToast(data.message || `Account created! Logged in as ${data.user.role.toUpperCase()} ✨`);
+        await checkAuthStatus();
+        await loadBooks();
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Create Account ✨";
+      }
+    }
+
+    async function submitAuthLogout() {
+      try {
+        await fetch("/auth/logout", { method: "POST" });
+        showToast("Signed out successfully.");
+        allBooks = [];
+        const bc = document.getElementById("bookContainer");
+        if (bc) bc.innerHTML = "";
+        await checkAuthStatus();
+      } catch (err) {
+        console.warn("Logout error", err);
+      }
+    }
+
+    async function openUserManagementModal() {
+      document.getElementById("userManagementModal").classList.add("open");
+      await loadUserManagementList();
+    }
+
+    function closeUserManagementModal() {
+      document.getElementById("userManagementModal").classList.remove("open");
+    }
+
+    async function loadUserManagementList() {
+      const container = document.getElementById("userListContainer");
+      const badge = document.getElementById("userCountBadge");
+      try {
+        const res = await fetch("/admin/users");
+        if (!res.ok) throw new Error("Failed to load user list");
+        const data = await res.json();
+        const users = data.users || [];
+        badge.textContent = `${users.length} accounts`;
+
+        if (!users.length) {
+          container.innerHTML = `<div style="text-align:center; padding:1.5rem; color:var(--text-muted);">No users found.</div>`;
+          return;
+        }
+
+        container.innerHTML = `
+          <table class="user-table">
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Role</th>
+                <th>Created</th>
+                <th style="text-align:right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${users.map(u => {
+                const isAdmin = u.role === "admin";
+                const isSelf = currentUser && currentUser.id === u.id;
+                return `
+                  <tr>
+                    <td>
+                      <div style="font-weight:700; color:#fff;">${escapeHtml(u.display_name)}</div>
+                      <div style="font-size:0.74rem; color:var(--text-muted);">@${escapeHtml(u.username)} ${isSelf ? '<span style="color:#a78bfa;">(You)</span>' : ''}</div>
+                    </td>
+                    <td>
+                      <span class="${isAdmin ? 'role-badge-admin' : 'role-badge-reader'}" style="font-size:0.68rem; padding:0.15rem 0.45rem; border-radius:4px; font-weight:800;">
+                        ${isAdmin ? '👑 ADMIN' : '📖 READER'}
+                      </span>
+                    </td>
+                    <td style="font-size:0.75rem; color:var(--text-muted);">
+                      ${u.created_at ? u.created_at.slice(0, 10) : '—'}
+                    </td>
+                    <td style="text-align:right; white-space:nowrap;">
+                      <button class="btn btn-secondary btn-xs" style="padding:0.2rem 0.45rem; font-size:0.7rem; margin-right:0.3rem;" onclick="changeUserRole(${u.id}, '${isAdmin ? 'reader' : 'admin'}')">
+                        ${isAdmin ? 'Make Reader' : 'Promote Admin'}
+                      </button>
+                      <button class="btn btn-secondary btn-xs" style="padding:0.2rem 0.45rem; font-size:0.7rem; margin-right:0.3rem;" title="Reset Password" onclick="promptResetUserPassword(${u.id}, '${escapeHtml(u.username)}')">
+                        🔑 Reset
+                      </button>
+                      ${!isSelf ? `
+                        <button class="btn btn-danger btn-xs" style="padding:0.2rem 0.45rem; font-size:0.7rem;" title="Delete User" onclick="deleteUserAccount(${u.id}, '${escapeHtml(u.username)}')">
+                          🗑️
+                        </button>
+                      ` : ''}
+                    </td>
+                  </tr>
+                `;
+              }).join("")}
+            </tbody>
+          </table>
+        `;
+      } catch (err) {
+        container.innerHTML = `<div style="color:#f87171; padding:1rem; text-align:center;">${err.message}</div>`;
+      }
+    }
+
+    async function submitCreateUserByAdmin(event) {
+      event.preventDefault();
+      const u = document.getElementById("adminNewUsername").value.trim();
+      const d = document.getElementById("adminNewDisplayName").value.trim();
+      const p = document.getElementById("adminNewPassword").value.trim();
+      const r = document.getElementById("adminNewRole").value;
+
+      try {
+        const res = await fetch("/admin/users", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: u, display_name: d, password: p, role: r })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Failed to create user");
+
+        document.getElementById("adminNewUsername").value = "";
+        document.getElementById("adminNewDisplayName").value = "";
+        document.getElementById("adminNewPassword").value = "";
+        showToast(data.message || `Created user @${u}! ✨`);
+        await loadUserManagementList();
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    async function changeUserRole(userId, newRole) {
+      if (!confirm(`Are you sure you want to change this user's role to ${newRole.toUpperCase()}?`)) return;
+      try {
+        const res = await fetch(`/admin/users/${userId}/role`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ role: newRole })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Failed to update role");
+        showToast(data.message || "Role updated!");
+        await loadUserManagementList();
+        await checkAuthStatus();
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    async function promptResetUserPassword(userId, username) {
+      const newPass = prompt(`Enter new password for @${username} (at least 4 characters):`);
+      if (!newPass || newPass.trim().length < 4) {
+        if (newPass !== null) alert("Password must be at least 4 characters.");
+        return;
+      }
+      try {
+        const res = await fetch(`/admin/users/${userId}/reset-password`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ new_password: newPass.trim() })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Failed to reset password");
+        showToast(`Password reset for @${username}!`);
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    async function deleteUserAccount(userId, username) {
+      if (!confirm(`Are you sure you want to permanently delete the account @${username}?`)) return;
+      try {
+        const res = await fetch(`/admin/users/${userId}`, { method: "DELETE" });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Failed to delete user");
+        showToast(`User @${username} deleted.`);
+        await loadUserManagementList();
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    // Prevent browser password autofill from populating top search bar
+    function cleanSearchAutofill() {
+      const s = document.getElementById("searchInput");
+      if (s && !mainSearchQuery && s.value) {
+        s.value = "";
+      }
+    }
+    window.addEventListener("DOMContentLoaded", cleanSearchAutofill);
+    window.addEventListener("load", () => {
+      cleanSearchAutofill();
+      setTimeout(cleanSearchAutofill, 50);
+      setTimeout(cleanSearchAutofill, 250);
+      setTimeout(cleanSearchAutofill, 800);
+      setTimeout(cleanSearchAutofill, 1500);
+      setTimeout(cleanSearchAutofill, 3000);
+      setTimeout(cleanSearchAutofill, 5000);
+    });
+    // Clear on back/forward cache restores, where browsers re-autofill after load.
+    window.addEventListener("pageshow", cleanSearchAutofill);
+
     initTheme();
-    loadBooks();
+    (async () => {
+      await checkAuthStatus();
+      if (authStatus.logged_in) {
+        await loadBooks();
+      }
+    })();
   </script>
 
   <!-- 17. IMPORT & SYNC HUB MODAL (CALIBRE, AUDIOBOOKSHELF, FABLE) -->
@@ -12941,6 +13788,151 @@
       <div class="modal-footer" style="border-top:1px solid rgba(255,255,255,0.08); padding-top:0.85rem; display:flex; justify-content:space-between; align-items:center;">
         <span style="font-size:0.72rem; color:var(--text-muted);">House of Wind Multi-Service Importer</span>
         <button type="button" class="btn btn-secondary" onclick="closeImportHubModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- AUTH & USER LOGIN MODAL -->
+  <div class="modal-backdrop" id="authModal" onclick="if(event.target===this) closeAuthModal()">
+    <div class="modal" style="max-width:440px;">
+      <div class="modal-header">
+        <div style="display:flex; align-items:center; gap:0.5rem;">
+          <span style="font-size:1.4rem;">🔐</span>
+          <div>
+            <h2 style="margin:0; font-size:1.2rem;" id="authModalTitle">Sign In</h2>
+            <div style="font-size:0.75rem; color:var(--text-muted);">Access your personal reading sanctuary</div>
+          </div>
+        </div>
+        <button class="close-btn" onclick="closeAuthModal()">×</button>
+      </div>
+
+      <!-- Tabs -->
+      <div style="display:flex; border-bottom:1px solid var(--border); margin-bottom:1.25rem;">
+        <button class="auth-tab-btn active" id="authTabBtnSignIn" onclick="switchAuthTab('signin')">Sign In</button>
+        <button class="auth-tab-btn" id="authTabBtnRegister" onclick="switchAuthTab('register')">Create Account</button>
+      </div>
+
+      <!-- Banner if first user setup -->
+      <div id="firstUserNoticeBanner" style="display:none; background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.35); border-radius:10px; padding:0.75rem 0.85rem; margin-bottom:1rem; font-size:0.78rem; line-height:1.4; color:#fde68a;">
+        👑 <strong>Welcome to House of Wind!</strong> No accounts exist yet. The first account created will be registered as the <strong>Library Administrator (Owner)</strong> with full permissions.
+      </div>
+
+      <!-- Sign In Form -->
+      <form id="authSignInForm" onsubmit="submitAuthSignIn(event)">
+        <div class="form-group">
+          <label>Username</label>
+          <input type="text" id="signInUsername" name="username" placeholder="e.g. gennie" required autocomplete="username" />
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="signInPassword" name="password" placeholder="••••••••" required autocomplete="current-password" />
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:1.5rem;">
+          <button type="button" class="btn btn-secondary" onclick="closeAuthModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btnSubmitSignIn" style="font-weight:700;">Sign In ✨</button>
+        </div>
+      </form>
+
+      <!-- Register Form -->
+      <form id="authRegisterForm" style="display:none;" onsubmit="submitAuthRegister(event)">
+        <div class="form-group">
+          <label>Username</label>
+          <input type="text" id="regUsername" name="username" placeholder="e.g. gennie" required minlength="3" autocomplete="username" />
+        </div>
+        <div class="form-group">
+          <label>Display Name <span class="hint">(optional)</span></label>
+          <input type="text" id="regDisplayName" name="display_name" placeholder="e.g. Gennie" />
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="regPassword" name="new-password" placeholder="At least 4 characters" required minlength="4" autocomplete="new-password" />
+        </div>
+        <div id="regRoleNotice" style="font-size:0.74rem; color:var(--text-muted); margin-bottom:1rem; line-height:1.4;">
+          📖 Subsequent accounts are registered as <strong>Readers</strong> (can browse, read, listen, and upload, but cannot delete books/files).
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:1.5rem;">
+          <button type="button" class="btn btn-secondary" onclick="closeAuthModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btnSubmitRegister" style="font-weight:700;">Create Account ✨</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ADMIN USER MANAGEMENT MODAL -->
+  <div class="modal-backdrop" id="userManagementModal" onclick="if(event.target===this) closeUserManagementModal()">
+    <div class="modal" style="max-width:680px; max-height:90vh; overflow-y:auto;">
+      <div class="modal-header">
+        <div style="display:flex; align-items:center; gap:0.55rem;">
+          <span style="font-size:1.4rem;">👥</span>
+          <div>
+            <h2 style="margin:0; font-size:1.25rem;">User Accounts & Access Control</h2>
+            <div style="font-size:0.75rem; color:var(--text-muted);">Manage library accounts and role permissions</div>
+          </div>
+        </div>
+        <button class="close-btn" onclick="closeUserManagementModal()">×</button>
+      </div>
+
+      <!-- Role Permissions Explainer -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem; margin-bottom:1.25rem;">
+        <div style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.25); border-radius:10px; padding:0.75rem 0.85rem; font-size:0.76rem; line-height:1.45;">
+          <strong style="color:#fde68a;">👑 Administrator (Owner)</strong><br/>
+          Full library access: upload, edit metadata, change themes, AND delete books, empty trash, and manage user accounts.
+        </div>
+        <div style="background:rgba(59,130,246,0.08); border:1px solid rgba(59,130,246,0.25); border-radius:10px; padding:0.75rem 0.85rem; font-size:0.76rem; line-height:1.45;">
+          <strong style="color:#93c5fd;">📖 Reader (Member / Guest)</strong><br/>
+          Full access to browse, read, listen, track progress, review, and upload files, but <strong>CANNOT delete books or files</strong>.
+        </div>
+      </div>
+
+      <!-- Users List -->
+      <div style="margin-bottom:1.5rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+          <h4 style="margin:0; font-size:0.95rem; color:#fff;">Registered Users</h4>
+          <span id="userCountBadge" style="font-size:0.75rem; color:var(--text-muted);"></span>
+        </div>
+        <div id="userListContainer" style="overflow-x:auto;">
+          <div style="text-align:center; padding:1.5rem; color:var(--text-muted);">Loading users...</div>
+        </div>
+      </div>
+
+      <!-- Create New User by Admin -->
+      <div style="background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:12px; padding:1.25rem;">
+        <h4 style="margin:0 0 0.85rem 0; font-size:0.95rem; color:#fff; display:flex; align-items:center; gap:0.4rem;">
+          <span>➕</span> Add New User Account
+        </h4>
+        <form onsubmit="submitCreateUserByAdmin(event)">
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem; margin-bottom:0.75rem;">
+            <div class="form-group" style="margin:0;">
+              <label>Username</label>
+              <input type="text" id="adminNewUsername" name="new_username" placeholder="e.g. friend_reader" required minlength="3" autocomplete="off" />
+            </div>
+            <div class="form-group" style="margin:0;">
+              <label>Display Name</label>
+              <input type="text" id="adminNewDisplayName" name="new_display_name" placeholder="e.g. Sarah" />
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem; margin-bottom:1rem;">
+            <div class="form-group" style="margin:0;">
+              <label>Password</label>
+              <input type="password" id="adminNewPassword" name="new_password" placeholder="At least 4 characters" required minlength="4" autocomplete="new-password" />
+            </div>
+            <div class="form-group" style="margin:0;">
+              <label>Role</label>
+              <select id="adminNewRole">
+                <option value="reader" selected>📖 Reader (Cannot delete files)</option>
+                <option value="admin">👑 Administrator (Full access)</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:flex; justify-content:flex-end;">
+            <button type="submit" class="btn btn-primary btn-sm" style="font-weight:700;">+ Create User</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="modal-footer" style="display:flex; justify-content:flex-end; margin-top:1.25rem;">
+        <button class="btn btn-secondary" onclick="closeUserManagementModal()">Close</button>
       </div>
     </div>
   </div>

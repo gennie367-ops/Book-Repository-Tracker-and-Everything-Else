@@ -57,6 +57,51 @@ if DATA_DIR:
     app.mount("/static/covers", StaticFiles(directory=COVERS_DIR), name="persistent_covers")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
+
+# --- ACCESS CONTROL: require a signed-in account for library data/actions ---
+# The login page, its static assets, and the auth endpoints stay public so a
+# visitor can sign in. Everything else (books, uploads, stats, trash, admin,
+# streaming/downloads) requires a valid session cookie or bearer token.
+PUBLIC_PATHS = {
+    "/",
+    "/index.html",
+    "/favicon.ico",
+    "/auth/status",
+    "/auth/login",
+    "/auth/logout",
+    "/auth/register",
+    "/health",
+}
+PUBLIC_PREFIXES = ("/static/",)
+
+
+@app.middleware("http")
+async def require_authentication(request: Request, call_next):
+    path = request.url.path
+    if request.method == "OPTIONS" or path in PUBLIC_PATHS or path.startswith(PUBLIC_PREFIXES):
+        return await call_next(request)
+
+    # Before the first account exists, allow access so first-run setup works.
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM users")
+        user_count = cur.fetchone()[0]
+        conn.close()
+    except Exception:
+        user_count = 0
+    if user_count == 0:
+        return await call_next(request)
+
+    user = get_current_user_from_request(request)
+    if not user:
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Authentication required. Please sign in to access the library."}
+        )
+    return await call_next(request)
+
+
 AUDIO_EXTENSIONS = {".m4b", ".mp3", ".m4a", ".flac", ".ogg", ".opus", ".aac", ".wav"}
 
 BROWSER_HEADERS = {
@@ -67,6 +112,92 @@ BROWSER_HEADERS = {
     ),
     "Accept-Language": "en-US,en;q=0.9",
 }
+
+
+# 1B. ACHIEVEMENT BADGE CATALOG & PER-USER BADGE SEEDING -----------------------------------
+# Badge definitions live here so every user account gets his or her own copy of the
+# badge list (with independently tracked unlock dates).
+ROMANTASY_BADGES = [
+    ("days_3", "Spark of Magic", "Logged reading on 3 distinct days", "🕯️", "habit", None, "Novice Scribe of Velaris"),
+    ("days_7", "Night Court Initiate", "Logged reading on 7 distinct days", "🌙", "habit", None, "Night Court Courtier"),
+    ("days_14", "Fortnight in Prythian", "Logged reading on 14 distinct days", "🌌", "habit", None, "Inner Circle Companion"),
+    ("days_30", "Mist & Fury Devotee", "Logged reading on 30 distinct days", "🦇", "habit", None, "High Lord's Confidante"),
+    ("days_60", "Illyrian Warrior Reader", "Logged reading on 60 distinct days", "🗡️", "habit", None, "Carynthian Champion"),
+    ("days_100", "Archivist of the Night", "Logged reading on 100 distinct days", "👑", "habit", None, "High Fae Scholar"),
+    ("days_180", "Six Months in Prythian", "Logged reading on 180 distinct days", "🌟", "habit", None, "High Lady of Velaris"),
+    ("days_365", "Year of the Valkyrie", "Logged reading on 365 distinct days", "⚔️", "habit", None, "Carynthian Legend"),
+    ("pages_250", "First Flight of the Dragon", "Read 250 total pages", "🐉", "pages", None, "Basgiath First-Year"),
+    ("pages_1000", "Grimoire of Velaris", "Read over 1,000 pages of stories", "📜", "pages", None, "Keeper of Ancient Volumes"),
+    ("pages_2500", "Shadowsinger's Compendium", "Read over 2,500 pages", "🖤", "pages", None, "Shadow Whisperer"),
+    ("pages_5000", "Queen of Tomes", "Conquer 5,000 pages of stories", "⚔️", "pages", None, "“You do not yield”"),
+    ("pages_10000", "Infinite Stacks", "Conquer over 10,000 pages of stories", "💎", "pages", None, "Mistress of the Archives"),
+    ("books_finished_1", "First Story Conquered", "Finish reading your first book", "📖", "books", None, "Literary Adventurer"),
+    ("books_finished_3", "Trio of Fates", "Finish reading 3 books", "✨", "books", None, "Weaver of Fates"),
+    ("books_finished_5", "Fireheart Ascendant", "Finish reading 5 books", "🔥", "books", None, "Fireheart"),
+    ("books_finished_10", "Velaris High Scholar", "Finish reading 10 books", "🏛️", "books", None, "Curator of House of Wind"),
+    ("books_finished_20", "High Court Royalty", "Finish reading 20 books", "👑", "books", None, "High Queen of the Court"),
+    ("books_finished_50", "Legend of Terrasen", "Finish reading 50 books", "🔥", "books", None, "“To whatever end”"),
+    ("audio_5h", "Whispers in the Dark", "Listen to 5+ hours of audiobooks", "🎧", "audio", None, "Attuned Listener"),
+    ("audio_15h", "Siren of the Spoken Word", "Listen to 15+ hours of audiobooks", "🌊", "audio", None, "Enchanted Siren"),
+    ("audio_30h", "Bard of Erilea", "Listen to 30+ hours of audiobooks", "🎵", "audio", None, "Master Lorekeeper"),
+    ("spice_lover", "Court of Pure Heat", "Read 2+ books with spice rating 3+ 🌶️", "🌶️", "romantasy", None, "Spice Connoisseur"),
+    ("spice_fiend", "High Priestess of Smut", "Read 4+ books with high spice (4-5 🌶️)", "🩸", "romantasy", None, "High Priestess of Smut"),
+    ("five_star_club", "Starfall Celebration", "Award 3+ books a perfect 5-star rating", "⭐", "social", None, "Chosen of Starfall"),
+    ("quote_collector", "Carved in Bone", "Save favorite quotes from 3+ books", "🖋️", "social", None, "Rune Carver of the Dead"),
+    ("author_loyalist", "Bloodsworn to the Author", "Read 3+ books by the same beloved author", "🩸", "books", None, "Bloodsworn Sentinel"),
+    ("genre_explorer", "World Walker", "Explore stories across 4 or more distinct genres", "🧭", "habit", None, "Realm Walker"),
+    ("weekend_warrior", "Sunlit Library Retreat", "Log reading on 5+ weekend days", "☀️", "habit", None, "Sunlit Scholar"),
+    ("quick_checkin", "Every Day Counts", "Check in for today's reading session", "✅", "habit", None, "Faithful Reader"),
+    ("series_finisher", "Slayer of Sagas", "Finish all books in any series", "🏆", "series", None, "Conqueror of Series"),
+    ("critic_3", "The Suriel's Tea", "Write 2+ detailed book reviews", "☕", "social", None, "Spiller of Fae Tea"),
+    ("tbr_hoarder", "Dragon's Book Hoard", "Have 3+ books queued on your TBR", "🏰", "tbr", None, "Keeper of the Hoard"),
+    ("trope_hunter", "Dagger to the Throat", "Read books with romance tropes or romantasy", "🏹", "romantasy", None, "Enemies-to-Lovers Devotee"),
+    ("mythology_reader", "Blessed by Olympus", "Read a Greek or mythology-inspired book", "⚡", "romantasy", None, "Favored of the Gods"),
+    ("fast_reader", "Midnight Page-Turner", "Read 50+ pages in a day or reach 300+ total pages", "🔮", "romantasy", None, "Nocturnal Bibliophile")
+]
+
+
+def seed_user_badges(conn, user_id: int, legacy_unlocks: Optional[dict] = None):
+    """Ensures each achievement badge row exists for this specific user, preserving
+    previously unlocked dates (including stashed legacy unlocks from the shared era)."""
+    cursor = conn.cursor()
+    for b_id, name, desc, icon, cat, default_unlocked, reward in ROMANTASY_BADGES:
+        cursor.execute(
+            "SELECT unlocked_at FROM user_achievements WHERE user_id = ? AND badge_id = ?",
+            (user_id, b_id)
+        )
+        if cursor.fetchone():
+            continue
+        legacy_unlocked = (legacy_unlocks or {}).get(b_id)
+        unlocked = legacy_unlocked if legacy_unlocked else default_unlocked
+        cursor.execute(
+            """INSERT OR IGNORE INTO user_achievements
+               (user_id, badge_id, name, description, icon, category, unlocked_at, reward_title)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (user_id, b_id, name, desc, icon, cat, unlocked, reward)
+        )
+
+
+# SQL predicate matching `books` rows that hold real (non-default) per-reader state.
+USER_STATE_PREDICATE_SQL = (
+    " is_read = 1"
+    " OR (date_read IS NOT NULL AND date_read != '')"
+    " OR rating > 0"
+    " OR (review IS NOT NULL AND review != '')"
+    " OR (review_headline IS NOT NULL AND review_headline != '')"
+    " OR (favorite_quotes IS NOT NULL AND favorite_quotes != '')"
+    " OR (favorite_characters IS NOT NULL AND favorite_characters != '')"
+    " OR (pace IS NOT NULL AND pace != '')"
+    " OR current_page > 0 OR progress_percent > 0 OR current_audio_minutes > 0"
+    " OR (reading_status IS NOT NULL AND reading_status NOT IN ('tbr', 'unread'))"
+)
+
+# Resets `books` per-reader columns back to neutral shared defaults (state lives per-user).
+USER_STATE_CLEAR_SQL = (
+    "is_read = 0, reading_status = 'tbr', rating = 0, review = '', date_read = '',"
+    " review_headline = '', favorite_quotes = '', favorite_characters = '', pace = '',"
+    " current_page = 0, progress_percent = 0, current_audio_minutes = 0"
+)
 
 
 # 2. Database Setup & Automatic Schema Upgrade
@@ -127,68 +258,62 @@ def init_db():
         )
     """)
 
-    # Create user_achievements table
+    # Create user_book_state table (per-user reading state: progress, read status,
+    # reviews, ratings, etc. Books themselves remain shared between accounts.)
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS user_achievements (
-            badge_id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            description TEXT NOT NULL,
-            icon TEXT NOT NULL,
-            category TEXT NOT NULL,
-            unlocked_at TEXT DEFAULT NULL,
-            reward_title TEXT DEFAULT ''
+        CREATE TABLE IF NOT EXISTS user_book_state (
+            user_id INTEGER NOT NULL,
+            book_id INTEGER NOT NULL,
+            is_read INTEGER DEFAULT 0,
+            reading_status TEXT DEFAULT 'tbr',
+            rating INTEGER DEFAULT 0,
+            review TEXT DEFAULT '',
+            date_read TEXT DEFAULT '',
+            review_headline TEXT DEFAULT '',
+            favorite_quotes TEXT DEFAULT '',
+            favorite_characters TEXT DEFAULT '',
+            pace TEXT DEFAULT '',
+            current_page INTEGER DEFAULT 0,
+            progress_percent INTEGER DEFAULT 0,
+            current_audio_minutes INTEGER DEFAULT 0,
+            UNIQUE(user_id, book_id)
         )
     """)
 
-    # Seed achievements if empty
-    # Seed or migrate reading achievements (no streaks, all days read and milestones)
-    cursor.execute("DELETE FROM user_achievements WHERE badge_id LIKE 'streak_%'")
-    romantasy_badges = [
-        ("days_3", "Spark of Magic", "Logged reading on 3 distinct days", "🕯️", "habit", None, "Novice Scribe of Velaris"),
-        ("days_7", "Night Court Initiate", "Logged reading on 7 distinct days", "🌙", "habit", None, "Night Court Courtier"),
-        ("days_14", "Fortnight in Prythian", "Logged reading on 14 distinct days", "🌌", "habit", None, "Inner Circle Companion"),
-        ("days_30", "Mist & Fury Devotee", "Logged reading on 30 distinct days", "🦇", "habit", None, "High Lord's Confidante"),
-        ("days_60", "Illyrian Warrior Reader", "Logged reading on 60 distinct days", "🗡️", "habit", None, "Carynthian Champion"),
-        ("days_100", "Archivist of the Night", "Logged reading on 100 distinct days", "👑", "habit", None, "High Fae Scholar"),
-        ("days_180", "Six Months in Prythian", "Logged reading on 180 distinct days", "🌟", "habit", None, "High Lady of Velaris"),
-        ("days_365", "Year of the Valkyrie", "Logged reading on 365 distinct days", "⚔️", "habit", None, "Carynthian Legend"),
-        ("pages_250", "First Flight of the Dragon", "Read 250 total pages", "🐉", "pages", None, "Basgiath First-Year"),
-        ("pages_1000", "Grimoire of Velaris", "Read over 1,000 pages of stories", "📜", "pages", None, "Keeper of Ancient Volumes"),
-        ("pages_2500", "Shadowsinger's Compendium", "Read over 2,500 pages", "🖤", "pages", None, "Shadow Whisperer"),
-        ("pages_5000", "Queen of Tomes", "Conquer 5,000 pages of stories", "⚔️", "pages", None, "“You do not yield”"),
-        ("pages_10000", "Infinite Stacks", "Conquer over 10,000 pages of stories", "💎", "pages", None, "Mistress of the Archives"),
-        ("books_finished_1", "First Story Conquered", "Finish reading your first book", "📖", "books", None, "Literary Adventurer"),
-        ("books_finished_3", "Trio of Fates", "Finish reading 3 books", "✨", "books", None, "Weaver of Fates"),
-        ("books_finished_5", "Fireheart Ascendant", "Finish reading 5 books", "🔥", "books", None, "Fireheart"),
-        ("books_finished_10", "Velaris High Scholar", "Finish reading 10 books", "🏛️", "books", None, "Curator of House of Wind"),
-        ("books_finished_20", "High Court Royalty", "Finish reading 20 books", "👑", "books", None, "High Queen of the Court"),
-        ("books_finished_50", "Legend of Terrasen", "Finish reading 50 books", "🔥", "books", None, "“To whatever end”"),
-        ("audio_5h", "Whispers in the Dark", "Listen to 5+ hours of audiobooks", "🎧", "audio", None, "Attuned Listener"),
-        ("audio_15h", "Siren of the Spoken Word", "Listen to 15+ hours of audiobooks", "🌊", "audio", None, "Enchanted Siren"),
-        ("audio_30h", "Bard of Erilea", "Listen to 30+ hours of audiobooks", "🎵", "audio", None, "Master Lorekeeper"),
-        ("spice_lover", "Court of Pure Heat", "Read 2+ books with spice rating 3+ 🌶️", "🌶️", "romantasy", None, "Spice Connoisseur"),
-        ("spice_fiend", "High Priestess of Smut", "Read 4+ books with high spice (4-5 🌶️)", "🩸", "romantasy", None, "High Priestess of Smut"),
-        ("five_star_club", "Starfall Celebration", "Award 3+ books a perfect 5-star rating", "⭐", "social", None, "Chosen of Starfall"),
-        ("quote_collector", "Carved in Bone", "Save favorite quotes from 3+ books", "🖋️", "social", None, "Rune Carver of the Dead"),
-        ("author_loyalist", "Bloodsworn to the Author", "Read 3+ books by the same beloved author", "🩸", "books", None, "Bloodsworn Sentinel"),
-        ("genre_explorer", "World Walker", "Explore stories across 4 or more distinct genres", "🧭", "habit", None, "Realm Walker"),
-        ("weekend_warrior", "Sunlit Library Retreat", "Log reading on 5+ weekend days", "☀️", "habit", None, "Sunlit Scholar"),
-        ("quick_checkin", "Every Day Counts", "Check in for today's reading session", "✅", "habit", None, "Faithful Reader"),
-        ("series_finisher", "Slayer of Sagas", "Finish all books in any series", "🏆", "series", None, "Conqueror of Series"),
-        ("critic_3", "The Suriel's Tea", "Write 2+ detailed book reviews", "☕", "social", None, "Spiller of Fae Tea"),
-        ("tbr_hoarder", "Dragon's Book Hoard", "Have 3+ books queued on your TBR", "🏰", "tbr", None, "Keeper of the Hoard"),
-        ("trope_hunter", "Dagger to the Throat", "Read books with romance tropes or romantasy", "🏹", "romantasy", None, "Enemies-to-Lovers Devotee"),
-        ("mythology_reader", "Blessed by Olympus", "Read a Greek or mythology-inspired book", "⚡", "romantasy", None, "Favored of the Gods"),
-        ("fast_reader", "Midnight Page-Turner", "Read 50+ pages in a day or reach 300+ total pages", "🔮", "romantasy", None, "Nocturnal Bibliophile")
-    ]
-    for b_id, name, desc, icon, cat, default_unlocked, reward in romantasy_badges:
-        cursor.execute("SELECT unlocked_at FROM user_achievements WHERE badge_id = ?", (b_id,))
-        row = cursor.fetchone()
-        existing_unlocked = row[0] if row else default_unlocked
+    # reading_logs gain per-user attribution (0 = legacy/shared rows)
+    cursor.execute("PRAGMA table_info(reading_logs)")
+    rl_cols = [r[1] for r in cursor.fetchall()]
+    if "user_id" not in rl_cols:
+        try:
+            cursor.execute("ALTER TABLE reading_logs ADD COLUMN user_id INTEGER DEFAULT 0")
+        except Exception:
+            pass
+
+    # user_achievements become per-user. If a legacy shared-shape table exists,
+    # stash unlocked dates and rebuild with a per-user primary key.
+    cursor.execute("PRAGMA table_info(user_achievements)")
+    ua_cols = [r[1] for r in cursor.fetchall()]
+    legacy_badge_unlocks = {}
+    if "user_id" not in ua_cols:
+        try:
+            for bid, un in cursor.execute("SELECT badge_id, unlocked_at FROM user_achievements WHERE unlocked_at IS NOT NULL").fetchall():
+                legacy_badge_unlocks[bid] = un
+        except Exception:
+            pass
+        cursor.execute("DROP TABLE user_achievements")
         cursor.execute("""
-            INSERT OR REPLACE INTO user_achievements (badge_id, name, description, icon, category, unlocked_at, reward_title)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (b_id, name, desc, icon, cat, existing_unlocked, reward))
+            CREATE TABLE IF NOT EXISTS user_achievements (
+                user_id INTEGER NOT NULL,
+                badge_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                description TEXT NOT NULL,
+                icon TEXT NOT NULL,
+                category TEXT NOT NULL,
+                unlocked_at TEXT DEFAULT NULL,
+                reward_title TEXT DEFAULT '',
+                PRIMARY KEY (user_id, badge_id)
+            )
+        """)
 
     cursor.execute("PRAGMA table_info(books)")
     existing_cols = {row[1] for row in cursor.fetchall()}
@@ -280,11 +405,123 @@ def init_db():
         )
     """)
 
+    # --- One-time migration: move shared reading state to the primary (admin)
+    # account so each user's progress / reviews / stats live in user_book_state. ---
+    cursor.execute("SELECT COUNT(*) FROM user_book_state")
+    ubs_count = cursor.fetchone()[0]
+    cursor.execute("SELECT id FROM users ORDER BY id ASC LIMIT 1")
+    primary_row = cursor.fetchone()
+    primary_uid = int(primary_row[0]) if primary_row else None
+    if ubs_count == 0 and primary_uid is not None:
+        cursor.execute(
+            f"""
+            INSERT OR IGNORE INTO user_book_state
+                (user_id, book_id, is_read, reading_status, rating, review, date_read,
+                 review_headline, favorite_quotes, favorite_characters, pace,
+                 current_page, progress_percent, current_audio_minutes)
+            SELECT ?, id, is_read, reading_status, rating, review, date_read,
+                   review_headline, favorite_quotes, favorite_characters, pace,
+                   current_page, progress_percent, current_audio_minutes
+            FROM books
+            WHERE (deleted_at IS NULL OR deleted_at = '') AND ({USER_STATE_PREDICATE_SQL})
+            """,
+            (primary_uid,),
+        )
+        cursor.execute(f"UPDATE books SET {USER_STATE_CLEAR_SQL}")
+        cursor.execute(
+            "UPDATE reading_logs SET user_id = ? WHERE user_id IS NULL OR user_id = 0",
+            (primary_uid,),
+        )
+
+    # Per-user badge rows (existing badges keep their unlock dates).
+    cursor.execute("SELECT id FROM users")
+    user_ids = [int(r[0]) for r in cursor.fetchall()]
+    for uid in user_ids:
+        seed_user_badges(conn, uid, legacy_badge_unlocks if uid == primary_uid else None)
+
     conn.commit()
     conn.close()
 
 
 init_db()
+
+
+# 2B. PER-USER STATE HELPERS --------------------------------------------------------------
+USER_STATE_COLS = (
+    "is_read", "reading_status", "rating", "review", "date_read",
+    "review_headline", "favorite_quotes", "favorite_characters",
+    "pace", "current_page", "progress_percent", "current_audio_minutes",
+)
+
+
+def ensure_effective_book_view(conn, user_id: int):
+    """Rebuilds a per-connection TEMP TABLE `books_eff`: the shared `books` columns
+    with each user's own reading state overlaid from user_book_state. Column order
+    matches SELECT_COLS exactly so `row_to_book` works unchanged."""
+    conn.execute("DROP TABLE IF EXISTS books_eff")
+    conn.execute(f"""
+        CREATE TEMP TABLE books_eff AS
+        SELECT b.id, b.title, b.author, b.filename, b.description, b.isbn, b.cover_url, b.published_year,
+               b.source, b.series_name, b.series_number,
+               COALESCE(s.is_read, b.is_read) AS is_read,
+               COALESCE(s.reading_status, b.reading_status) AS reading_status,
+               COALESCE(s.rating, b.rating) AS rating,
+               COALESCE(s.review, b.review) AS review,
+               COALESCE(s.date_read, b.date_read) AS date_read,
+               b.media_type, b.narrator, b.duration,
+               COALESCE(s.review_headline, b.review_headline) AS review_headline,
+               COALESCE(s.favorite_quotes, b.favorite_quotes) AS favorite_quotes,
+               COALESCE(s.favorite_characters, b.favorite_characters) AS favorite_characters,
+               b.spice_rating,
+               COALESCE(s.pace, b.pace) AS pace,
+               b.tropes, b.page_count,
+               COALESCE(s.current_page, b.current_page) AS current_page,
+               COALESCE(s.progress_percent, b.progress_percent) AS progress_percent,
+               b.genres, b.deleted_at,
+               COALESCE(s.current_audio_minutes, b.current_audio_minutes) AS current_audio_minutes
+        FROM books b
+        LEFT JOIN user_book_state s
+               ON s.book_id = b.id AND s.user_id = {int(user_id or 0)}
+    """)
+
+
+def upsert_user_book_state(conn, user_id: int, book_id: int, updates: dict):
+    """Creates or updates the user's personal reading-state row for a book."""
+    clean = {k: v for k, v in (updates or {}).items() if k in USER_STATE_COLS}
+    if not clean or not user_id:
+        return
+    cursor = conn.cursor()
+    cursor.execute("INSERT OR IGNORE INTO user_book_state (user_id, book_id) VALUES (?, ?)", (user_id, book_id))
+    sets = ", ".join(f"{col} = ?" for col in clean)
+    vals = list(clean.values()) + [user_id, book_id]
+    cursor.execute(f"UPDATE user_book_state SET {sets} WHERE user_id = ? AND book_id = ?", tuple(vals))
+
+
+def adopt_book_into_user_state(conn, user_id: int, book_id: int):
+    """Moves any per-reader state just written on a shared `books` row into the given
+    user's personal state, then resets the shared columns to neutral defaults."""
+    cursor = conn.cursor()
+    cursor.execute(f"""
+        SELECT is_read, reading_status, rating, review, date_read, review_headline,
+               favorite_quotes, favorite_characters, pace, current_page, progress_percent,
+               current_audio_minutes
+        FROM books WHERE id = ?
+    """, (book_id,))
+    row = cursor.fetchone()
+    if not row:
+        return
+    upsert_user_book_state(conn, user_id, book_id, dict(zip(USER_STATE_COLS, row)))
+    cursor.execute(f"UPDATE books SET {USER_STATE_CLEAR_SQL} WHERE id = ?", (book_id,))
+
+
+def adopt_books_into_user_state(conn, user_id: int):
+    """Sweeps ALL shared rows that still hold per-reader state (e.g. freshly imported)
+    into the given user's personal state, then resets the shared columns to defaults."""
+    cursor = conn.cursor()
+    cursor.execute(f"SELECT id FROM books WHERE {USER_STATE_PREDICATE_SQL}")
+    book_ids = [int(r[0]) for r in cursor.fetchall()]
+    for bid in book_ids:
+        adopt_book_into_user_state(conn, user_id, bid)
 
 
 def hash_user_password(password: str, salt: str) -> str:
@@ -338,6 +575,13 @@ def get_current_user_from_request(request: Request) -> Optional[dict]:
         "theme_preference": row[4] or "",
         "custom_themes": custom_th
     }
+
+
+def get_request_user_id(request: Request) -> Optional[int]:
+    user = get_current_user_from_request(request)
+    if not user:
+        return None
+    return int(user["id"])
 
 
 def require_admin_to_delete(request: Request) -> Optional[dict]:
@@ -1520,6 +1764,7 @@ def save_book_bytes_to_catalog(
     tropes_override: Optional[str] = None,
     skip_if_exists: bool = False,
     auto_rename_if_exists: bool = False,
+    adopt_user_id: Optional[int] = None,
 ) -> dict:
     ext = os.path.splitext(original_filename or "")[1]
     media_type = detect_media_type(original_filename or "", media_type_override)
@@ -1696,6 +1941,10 @@ def save_book_bytes_to_catalog(
         ))
         book_id = cursor.lastrowid
 
+    # Reading-status chosen at upload belongs to the uploading user, not the shared shelf
+    if adopt_user_id:
+        adopt_book_into_user_state(conn, int(adopt_user_id), int(book_id))
+
     conn.commit()
     conn.close()
 
@@ -1727,6 +1976,7 @@ def save_book_bytes_to_catalog(
 # --- 2. SMART UPLOAD (Ebook or Audiobook File) ---
 @app.post("/books/upload-smart")
 async def upload_smart(
+    request: Request,
     lookup_query: str = Form(""),
     metadata_source: str = Form("all"),
     custom_filename: Optional[str] = Form(None),
@@ -1749,6 +1999,7 @@ async def upload_smart(
     auto_rename_if_exists: bool = Form(False),
     file: UploadFile = File(...)
 ):
+    uid = get_request_user_id(request)
     file_bytes = await file.read()
     return save_book_bytes_to_catalog(
         file_bytes=file_bytes,
@@ -1773,6 +2024,7 @@ async def upload_smart(
         tropes_override=tropes,
         skip_if_exists=skip_if_exists,
         auto_rename_if_exists=auto_rename_if_exists,
+        adopt_user_id=uid,
     )
 
 
@@ -1785,7 +2037,8 @@ class ImportUrlPayload(BaseModel):
 
 
 @app.post("/books/import-url")
-def import_book_from_url(payload: ImportUrlPayload):
+def import_book_from_url(payload: ImportUrlPayload, request: Request):
+    uid = get_request_user_id(request)
     url = payload.url.strip()
     if not (url.startswith("http://") or url.startswith("https://")):
         raise HTTPException(status_code=400, detail="Invalid URL. Must begin with http:// or https://")
@@ -1807,6 +2060,7 @@ def import_book_from_url(payload: ImportUrlPayload):
             media_type_override=payload.media_type,
             reading_status_override=payload.reading_status or "unread",
             auto_rename_if_exists=True,
+            adopt_user_id=uid,
         )
         return {
             "message": f"Successfully imported '{res_dict['populated_metadata']['title']}'!",
@@ -1843,7 +2097,8 @@ def get_inbox_status():
 
 
 @app.post("/books/scan-inbox")
-def scan_and_import_inbox():
+def scan_and_import_inbox(request: Request):
+    uid = get_request_user_id(request)
     imported = []
     skipped = []
     errors = []
@@ -1867,7 +2122,8 @@ def scan_and_import_inbox():
             result = save_book_bytes_to_catalog(
                 file_bytes=file_bytes,
                 original_filename=fname,
-                skip_if_exists=True
+                skip_if_exists=True,
+                adopt_user_id=uid
             )
 
             if result.get("status") == "skipped":
@@ -2002,7 +2258,8 @@ def remove_book_from_series(book_id: int):
     return {"status": "success", "message": f"Book #{book_id} unlinked from series."}
 
 @app.post("/books/add-without-file")
-def add_book_without_file(payload: AddBookWithoutFilePayload):
+def add_book_without_file(payload: AddBookWithoutFilePayload, request: Request):
+    uid = get_request_user_id(request)
     is_read_val = 1 if payload.reading_status == "read" else 0
     date_read_val = datetime.date.today().isoformat() if is_read_val else ""
 
@@ -2047,6 +2304,8 @@ def add_book_without_file(payload: AddBookWithoutFilePayload):
     ))
     conn.commit()
     book_id = cursor.lastrowid
+    if uid:
+        adopt_book_into_user_state(conn, uid, book_id)
     conn.close()
     return {"message": "Added to your list!", "book_id": book_id, "spice_rating": spice_val, "tropes": tropes_val}
 
@@ -2084,10 +2343,12 @@ async def attach_file_to_book(book_id: int, file: UploadFile = File(...)):
 
 # --- 3. LIST ALL BOOKS ---
 @app.get("/books")
-def list_all_books(has_file: Optional[str] = None):
+def list_all_books(request: Request, has_file: Optional[str] = None):
+    uid = get_request_user_id(request)
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute(f"SELECT {SELECT_COLS} FROM books WHERE (deleted_at IS NULL OR deleted_at = '') ORDER BY id DESC")
+    ensure_effective_book_view(conn, uid)
+    cursor.execute(f"SELECT {SELECT_COLS} FROM books_eff WHERE (deleted_at IS NULL OR deleted_at = '') ORDER BY id DESC")
     rows = cursor.fetchall()
     conn.close()
 
@@ -2101,13 +2362,15 @@ def list_all_books(has_file: Optional[str] = None):
 
 # --- 4. SEARCH LOCAL CATALOG ---
 @app.get("/books/search")
-def search_books(q: str = ""):
+def search_books(request: Request, q: str = ""):
+    uid = get_request_user_id(request)
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
+    ensure_effective_book_view(conn, uid)
     wildcard = f"%{q}%"
     cursor.execute(f"""
         SELECT {SELECT_COLS}
-        FROM books
+        FROM books_eff
         WHERE (deleted_at IS NULL OR deleted_at = '')
           AND (title LIKE ? OR author LIKE ? OR description LIKE ?
            OR isbn LIKE ? OR filename LIKE ? OR series_name LIKE ?
@@ -2123,10 +2386,12 @@ def search_books(q: str = ""):
 
 
 @app.get("/books/{book_id}")
-def get_single_book(book_id: int):
+def get_single_book(request: Request, book_id: int):
+    uid = get_request_user_id(request)
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute(f"SELECT {SELECT_COLS} FROM books WHERE id = ?", (book_id,))
+    ensure_effective_book_view(conn, uid)
+    cursor.execute(f"SELECT {SELECT_COLS} FROM books_eff WHERE id = ?", (book_id,))
     row = cursor.fetchone()
     conn.close()
     if not row:
@@ -2141,10 +2406,12 @@ class StatusUpdatePayload(BaseModel):
 
 
 @app.post("/books/{book_id}/status")
-def update_reading_status(book_id: int, payload: StatusUpdatePayload):
+def update_reading_status(book_id: int, payload: StatusUpdatePayload, request: Request):
+    uid = get_request_user_id(request)
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute("SELECT is_read, reading_status, date_read FROM books WHERE id = ?", (book_id,))
+    ensure_effective_book_view(conn, uid)
+    cursor.execute("SELECT is_read, reading_status, date_read FROM books_eff WHERE id = ?", (book_id,))
     row = cursor.fetchone()
     if not row:
         conn.close()
@@ -2166,10 +2433,11 @@ def update_reading_status(book_id: int, payload: StatusUpdatePayload):
 
     new_date = (current_date or datetime.date.today().isoformat()) if new_read else ""
 
-    cursor.execute(
-        "UPDATE books SET is_read = ?, reading_status = ?, date_read = ? WHERE id = ?",
-        (new_read, new_status, new_date, book_id)
-    )
+    upsert_user_book_state(conn, uid, book_id, {
+        "is_read": new_read,
+        "reading_status": new_status,
+        "date_read": new_date
+    })
     conn.commit()
     conn.close()
     return {
@@ -2194,12 +2462,14 @@ class RatingReviewPayload(BaseModel):
 
 
 @app.post("/books/{book_id}/review")
-def update_rating_and_review(book_id: int, payload: RatingReviewPayload):
+def update_rating_and_review(book_id: int, payload: RatingReviewPayload, request: Request):
+    uid = get_request_user_id(request)
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
+    ensure_effective_book_view(conn, uid)
     cursor.execute("""
         SELECT rating, review, review_headline, favorite_quotes, favorite_characters, spice_rating, pace, tropes, is_read, reading_status, date_read
-        FROM books WHERE id = ?
+        FROM books_eff WHERE id = ?
     """, (book_id,))
     row = cursor.fetchone()
     if not row:
@@ -2225,18 +2495,21 @@ def update_rating_and_review(book_id: int, payload: RatingReviewPayload):
         if not date_read_val:
             date_read_val = datetime.date.today().isoformat()
 
-    cursor.execute("""
-        UPDATE books
-        SET rating = ?, review = ?, review_headline = ?, favorite_quotes = ?,
-            favorite_characters = ?, spice_rating = ?, pace = ?, tropes = ?,
-            is_read = ?, reading_status = ?, date_read = ?
-        WHERE id = ?
-    """, (
-        rating_val, review_val, headline_val, quotes_val,
-        chars_val, spice_val, pace_val, tropes_val,
-        is_read_val, reading_status_val, date_read_val,
-        book_id
-    ))
+    cursor.execute(
+        "UPDATE books SET spice_rating = ?, tropes = ? WHERE id = ?",
+        (spice_val, tropes_val, book_id)
+    )
+    upsert_user_book_state(conn, uid, book_id, {
+        "rating": rating_val,
+        "review": review_val,
+        "review_headline": headline_val,
+        "favorite_quotes": quotes_val,
+        "favorite_characters": chars_val,
+        "pace": pace_val,
+        "is_read": is_read_val,
+        "reading_status": reading_status_val,
+        "date_read": date_read_val
+    })
     conn.commit()
     conn.close()
     return {
@@ -2255,15 +2528,22 @@ def update_rating_and_review(book_id: int, payload: RatingReviewPayload):
 
 
 @app.post("/books/{book_id}/review/clear")
-def clear_book_review(book_id: int):
+def clear_book_review(book_id: int, request: Request):
+    uid = get_request_user_id(request)
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE books
-        SET rating = 0, review = '', review_headline = '', favorite_quotes = '',
-            favorite_characters = '', spice_rating = 0, pace = '', tropes = ''
-        WHERE id = ?
-    """, (book_id,))
+    cursor.execute(
+        "UPDATE books SET spice_rating = 0, tropes = '' WHERE id = ?",
+        (book_id,)
+    )
+    upsert_user_book_state(conn, uid, book_id, {
+        "rating": 0,
+        "review": "",
+        "review_headline": "",
+        "favorite_quotes": "",
+        "favorite_characters": "",
+        "pace": ""
+    })
     conn.commit()
     conn.close()
     return {"message": "Review cleared", "book_id": book_id}
@@ -2394,10 +2674,12 @@ class BookUpdate(BaseModel):
 
 
 @app.put("/books/{book_id}")
-def update_book_metadata(book_id: int, payload: BookUpdate):
+def update_book_metadata(book_id: int, payload: BookUpdate, request: Request):
+    uid = get_request_user_id(request)
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute("SELECT date_read FROM books WHERE id = ?", (book_id,))
+    ensure_effective_book_view(conn, uid)
+    cursor.execute("SELECT date_read FROM books_eff WHERE id = ?", (book_id,))
     row = cursor.fetchone()
     if not row:
         conn.close()
@@ -2409,15 +2691,13 @@ def update_book_metadata(book_id: int, payload: BookUpdate):
     spice_val = max(0, min(5, int(payload.spice_rating))) if payload.spice_rating is not None else None
     tropes_val = payload.tropes.strip() if payload.tropes is not None else None
 
+    # Shared library metadata stays on books; per-reader fields go to user_book_state.
     cursor.execute("""
         UPDATE books
         SET title = ?, author = ?, description = ?, isbn = ?, cover_url = ?,
             published_year = ?, source = ?, series_name = ?, series_number = ?,
-            is_read = ?, reading_status = ?, rating = ?, review = ?, date_read = ?,
             media_type = ?, narrator = ?, duration = ?,
             page_count = COALESCE(?, page_count),
-            current_page = COALESCE(?, current_page),
-            progress_percent = COALESCE(?, progress_percent),
             genres = COALESCE(?, genres),
             spice_rating = COALESCE(?, spice_rating),
             tropes = COALESCE(?, tropes)
@@ -2432,22 +2712,27 @@ def update_book_metadata(book_id: int, payload: BookUpdate):
         payload.source.strip(),
         payload.series_name.strip(),
         payload.series_number.strip(),
-        is_read_val,
-        payload.reading_status.strip() or "tbr",
-        max(0, min(5, int(payload.rating or 0))),
-        payload.review.strip(),
-        date_read_val,
         payload.media_type.strip() or "ebook",
         payload.narrator.strip(),
         payload.duration.strip(),
         payload.page_count,
-        payload.current_page,
-        payload.progress_percent,
         payload.genres,
         spice_val,
         tropes_val,
         book_id
     ))
+    user_updates = {
+        "is_read": is_read_val,
+        "reading_status": payload.reading_status.strip() or "tbr",
+        "rating": max(0, min(5, int(payload.rating or 0))),
+        "review": payload.review.strip(),
+        "date_read": date_read_val
+    }
+    if payload.current_page is not None:
+        user_updates["current_page"] = payload.current_page
+    if payload.progress_percent is not None:
+        user_updates["progress_percent"] = payload.progress_percent
+    upsert_user_book_state(conn, uid, book_id, user_updates)
     conn.commit()
     conn.close()
     return {"message": "Metadata updated!", "book_id": book_id}
@@ -2470,6 +2755,7 @@ def delete_book(book_id: int, request: Request, permanent: bool = False, delete_
 
     if permanent or already_trashed:
         # Permanent delete from database and storage
+        cursor.execute("DELETE FROM user_book_state WHERE book_id = ?", (book_id,))
         cursor.execute("DELETE FROM books WHERE id = ?", (book_id,))
         conn.commit()
         conn.close()
@@ -2527,6 +2813,7 @@ def list_trash_books():
 
     # Prune expired items (> 30 days)
     for eid, fn in expired_ids:
+        cursor.execute("DELETE FROM user_book_state WHERE book_id = ?", (eid,))
         cursor.execute("DELETE FROM books WHERE id = ?", (eid,))
         if fn:
             fp = os.path.join(STORAGE_DIR, fn)
@@ -2571,6 +2858,7 @@ def empty_trash_vault(request: Request):
                     os.remove(fp)
                 except Exception:
                     pass
+    cursor.execute("DELETE FROM user_book_state WHERE book_id IN (SELECT id FROM books WHERE deleted_at IS NOT NULL AND deleted_at != '')")
     cursor.execute("DELETE FROM books WHERE deleted_at IS NOT NULL AND deleted_at != ''")
     conn.commit()
     conn.close()
@@ -3617,10 +3905,12 @@ def resolve_series_next_book(series_name: str, author: str, next_num_float: floa
     }
 
 @app.post("/ai/chat-recommender")
-def ai_chat_recommender(payload: ChatMessagePayload):
+def ai_chat_recommender(payload: ChatMessagePayload, request: Request):
+    uid = get_request_user_id(request)
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute(f"SELECT {SELECT_COLS} FROM books ORDER BY id DESC")
+    ensure_effective_book_view(conn, uid)
+    cursor.execute(f"SELECT {SELECT_COLS} FROM books_eff ORDER BY id DESC")
     rows = cursor.fetchall()
     conn.close()
 
@@ -3716,7 +4006,7 @@ CRITICAL ACCURACY & THEMATIC RULES:
             gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key={gemini_key}"
             req_body = {
                 "contents": [{"parts": [{"text": system_instruction}]}],
-                "generationConfig": {"temperature": 0.7, "maxOutputTokens": 1000}
+                "generationConfig": {"temperature": 0.7, "maxOutputTokens": 3072}
             }
             resp = requests.post(gemini_url, json=req_body, timeout=14)
             if resp.status_code == 200:
@@ -3999,15 +4289,16 @@ class DayLogPayload(BaseModel):
     notes: Optional[str] = ""
 
 
-def check_and_unlock_achievements(conn) -> list[dict]:
-    """Checks current reading days, pages, and milestones and unlocks badges."""
+def check_and_unlock_achievements(conn, user_id: int) -> list[dict]:
+    """Checks current reading days, pages, and milestones and unlocks badges (per user)."""
     cursor = conn.cursor()
     today_str = datetime.date.today().isoformat()
+    ensure_effective_book_view(conn, user_id)
 
     # Calculate streak
-    cursor.execute("SELECT DISTINCT date FROM reading_logs")
+    cursor.execute(f"SELECT DISTINCT date FROM reading_logs WHERE user_id = {int(user_id)}")
     dates = {r[0] for r in cursor.fetchall()}
-    cursor.execute("SELECT DISTINCT date_read FROM books WHERE is_read = 1 AND date_read != ''")
+    cursor.execute("SELECT DISTINCT date_read FROM books_eff WHERE is_read = 1 AND date_read != ''")
     for r in cursor.fetchall():
         dates.add(r[0])
 
@@ -4023,20 +4314,20 @@ def check_and_unlock_achievements(conn) -> list[dict]:
         check_date -= datetime.timedelta(days=1)
 
     # Total pages: finished books + currently reading in-progress pages
-    cursor.execute("SELECT SUM(CASE WHEN page_count > 0 THEN page_count ELSE current_page END) FROM books WHERE is_read = 1")
+    cursor.execute("SELECT SUM(CASE WHEN page_count > 0 THEN page_count ELSE current_page END) FROM books_eff WHERE is_read = 1")
     b_pages = cursor.fetchone()[0] or 0
     cursor.execute("""
         SELECT SUM(CASE 
             WHEN current_page > 0 THEN current_page 
             WHEN page_count > 0 AND progress_percent > 0 THEN CAST(ROUND(page_count * progress_percent / 100.0) AS INTEGER)
             ELSE 0 
-        END) FROM books WHERE is_read = 0 AND (current_page > 0 OR progress_percent > 0)
+        END) FROM books_eff WHERE is_read = 0 AND (current_page > 0 OR progress_percent > 0)
     """)
     in_prog_pages = cursor.fetchone()[0] or 0
     total_pages = b_pages + in_prog_pages
 
     # Audio hours
-    cursor.execute("SELECT duration FROM books WHERE is_read = 1 AND media_type = 'audiobook'")
+    cursor.execute("SELECT duration FROM books_eff WHERE is_read = 1 AND media_type = 'audiobook'")
     dur_rows = cursor.fetchall()
     audio_mins = 0
     for dr in dur_rows:
@@ -4049,48 +4340,48 @@ def check_and_unlock_achievements(conn) -> list[dict]:
     audio_hours = audio_mins / 60
 
     # Spicy books
-    cursor.execute("SELECT COUNT(*) FROM books WHERE is_read = 1 AND spice_rating >= 3")
+    cursor.execute("SELECT COUNT(*) FROM books_eff WHERE is_read = 1 AND spice_rating >= 3")
     spicy_count = cursor.fetchone()[0] or 0
 
     # Reviews written
-    cursor.execute("SELECT COUNT(*) FROM books WHERE (review != '' OR review_headline != '' OR favorite_quotes != '')")
+    cursor.execute("SELECT COUNT(*) FROM books_eff WHERE (review != '' OR review_headline != '' OR favorite_quotes != '')")
     review_count = cursor.fetchone()[0] or 0
 
     # Completed series
-    cursor.execute("SELECT series_name, COUNT(*), SUM(is_read) FROM books WHERE series_name != '' GROUP BY series_name")
+    cursor.execute("SELECT series_name, COUNT(*), SUM(is_read) FROM books_eff WHERE series_name != '' GROUP BY series_name")
     series_rows = cursor.fetchall()
     completed_series_count = sum(1 for sr in series_rows if sr[1] > 0 and sr[1] == sr[2])
 
     total_days_read = len(dates)
-    cursor.execute("SELECT COUNT(*) FROM books WHERE is_read = 1")
+    cursor.execute("SELECT COUNT(*) FROM books_eff WHERE is_read = 1")
     books_finished_count = cursor.fetchone()[0] or 0
 
-    cursor.execute("SELECT COUNT(*) FROM books WHERE is_read = 1 AND spice_rating >= 4")
+    cursor.execute("SELECT COUNT(*) FROM books_eff WHERE is_read = 1 AND spice_rating >= 4")
     spicy_4_count = cursor.fetchone()[0] or 0
 
-    cursor.execute("SELECT COUNT(*) FROM books WHERE reading_status = 'tbr' AND is_read = 0")
+    cursor.execute("SELECT COUNT(*) FROM books_eff WHERE reading_status = 'tbr' AND is_read = 0")
     tbr_count = cursor.fetchone()[0] or 0
 
-    cursor.execute("SELECT COUNT(*) FROM books WHERE tropes != '' OR genres LIKE '%Romance%' OR genres LIKE '%Fantasy%'")
+    cursor.execute("SELECT COUNT(*) FROM books_eff WHERE tropes != '' OR genres LIKE '%Romance%' OR genres LIKE '%Fantasy%'")
     trope_count = cursor.fetchone()[0] or 0
 
-    cursor.execute("SELECT COUNT(*) FROM books WHERE series_name LIKE '%Hades%' OR series_name LIKE '%Olympus%' OR genres LIKE '%Mythology%' OR title LIKE '%God%' OR title LIKE '%Greek%'")
+    cursor.execute("SELECT COUNT(*) FROM books_eff WHERE series_name LIKE '%Hades%' OR series_name LIKE '%Olympus%' OR genres LIKE '%Mythology%' OR title LIKE '%God%' OR title LIKE '%Greek%'")
     myth_count = cursor.fetchone()[0] or 0
 
-    cursor.execute("SELECT MAX(pages_read) FROM reading_logs")
+    cursor.execute(f"SELECT MAX(pages_read) FROM reading_logs WHERE user_id = {int(user_id)}")
     max_single_session_pgs = cursor.fetchone()[0] or 0
 
-    cursor.execute("SELECT COUNT(*) FROM books WHERE is_read = 1 AND rating = 5")
+    cursor.execute("SELECT COUNT(*) FROM books_eff WHERE is_read = 1 AND rating = 5")
     five_star_count = cursor.fetchone()[0] or 0
 
-    cursor.execute("SELECT COUNT(*) FROM books WHERE favorite_quotes != ''")
+    cursor.execute("SELECT COUNT(*) FROM books_eff WHERE favorite_quotes != ''")
     quote_count = cursor.fetchone()[0] or 0
 
-    cursor.execute("SELECT MAX(cnt) FROM (SELECT COUNT(*) as cnt FROM books WHERE is_read = 1 GROUP BY author)")
+    cursor.execute("SELECT MAX(cnt) FROM (SELECT COUNT(*) as cnt FROM books_eff WHERE is_read = 1 GROUP BY author)")
     res_max_author = cursor.fetchone()
     max_author_count = res_max_author[0] if res_max_author and res_max_author[0] else 0
 
-    cursor.execute("SELECT genres FROM books WHERE is_read = 1 AND genres != ''")
+    cursor.execute("SELECT genres FROM books_eff WHERE is_read = 1 AND genres != ''")
     all_genres_set = set()
     for gr in cursor.fetchall():
         for tok in (gr[0] or "").split(","):
@@ -4148,10 +4439,16 @@ def check_and_unlock_achievements(conn) -> list[dict]:
     newly_unlocked = []
     for badge_id, met in criteria.items():
         if met:
-            cursor.execute("SELECT unlocked_at, name, description, icon, reward_title FROM user_achievements WHERE badge_id = ?", (badge_id,))
+            cursor.execute(
+                "SELECT unlocked_at, name, description, icon, reward_title FROM user_achievements WHERE user_id = ? AND badge_id = ?",
+                (user_id, badge_id)
+            )
             badge_row = cursor.fetchone()
             if badge_row and not badge_row[0]:
-                cursor.execute("UPDATE user_achievements SET unlocked_at = ? WHERE badge_id = ?", (today_str, badge_id))
+                cursor.execute(
+                    "UPDATE user_achievements SET unlocked_at = ? WHERE user_id = ? AND badge_id = ?",
+                    (today_str, user_id, badge_id)
+                )
                 newly_unlocked.append({
                     "badge_id": badge_id,
                     "name": badge_row[1],
@@ -4165,10 +4462,12 @@ def check_and_unlock_achievements(conn) -> list[dict]:
 
 
 @app.post("/books/{book_id}/progress")
-def update_book_progress(book_id: int, payload: ProgressPayload):
+def update_book_progress(book_id: int, payload: ProgressPayload, request: Request):
+    uid = get_request_user_id(request) or 0
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute("SELECT id, title, page_count, current_page, progress_percent, reading_status, is_read, media_type, duration, current_audio_minutes FROM books WHERE id = ?", (book_id,))
+    ensure_effective_book_view(conn, uid)
+    cursor.execute("SELECT id, title, page_count, current_page, progress_percent, reading_status, is_read, media_type, duration, current_audio_minutes FROM books_eff WHERE id = ?", (book_id,))
     row = cursor.fetchone()
     if not row:
         conn.close()
@@ -4268,24 +4567,28 @@ def update_book_progress(book_id: int, payload: ProgressPayload):
         new_is_read = 1 if new_status == "read" else 0
         date_read_val = today_str if new_is_read else ""
 
-    cursor.execute("""
-        UPDATE books
-        SET page_count = ?, current_page = ?, progress_percent = ?,
-            current_audio_minutes = ?,
-            reading_status = ?, is_read = ?,
-            date_read = CASE WHEN ? != '' THEN ? ELSE date_read END
-        WHERE id = ?
-    """, (total_pages, current_page, percent, current_audio_minutes, new_status, new_is_read, date_read_val, date_read_val, book_id))
+    # Page/percent progress are per-user; page_count stays shared metadata.
+    cursor.execute("UPDATE books SET page_count = ? WHERE id = ?", (total_pages, book_id))
+    user_progress_updates = {
+        "current_page": current_page,
+        "progress_percent": percent,
+        "current_audio_minutes": current_audio_minutes,
+        "reading_status": new_status,
+        "is_read": new_is_read
+    }
+    if date_read_val:
+        user_progress_updates["date_read"] = date_read_val
+    upsert_user_book_state(conn, uid, book_id, user_progress_updates)
 
     # Log session for calendar tracking
     if payload.log_session:
-        cursor.execute("""
-            INSERT INTO reading_logs (book_id, date, pages_read, minutes_read, notes)
-            VALUES (?, ?, ?, ?, ?)
-        """, (book_id, today_str, 0, payload.minutes_read or 0, payload.notes or "Progress update check-in"))
+        cursor.execute(
+            f"INSERT INTO reading_logs (user_id, book_id, date, pages_read, minutes_read, notes) VALUES ({int(uid)}, ?, ?, ?, ?, ?)",
+            (book_id, today_str, 0, payload.minutes_read or 0, payload.notes or "Progress update check-in")
+        )
 
     conn.commit()
-    newly_unlocked = check_and_unlock_achievements(conn)
+    newly_unlocked = check_and_unlock_achievements(conn, uid)
     conn.close()
 
     aud_h = current_audio_minutes // 60
@@ -4305,18 +4608,22 @@ def update_book_progress(book_id: int, payload: ProgressPayload):
 
 
 @app.post("/stats/log-day")
-def log_reading_day(payload: DayLogPayload):
+def log_reading_day(payload: DayLogPayload, request: Request):
+    uid = get_request_user_id(request) or 0
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     today_str = (payload.date or datetime.date.today().isoformat()).strip()
 
-    cursor.execute("""
-        INSERT INTO reading_logs (book_id, date, pages_read, minutes_read, notes)
-        VALUES (?, ?, ?, ?, ?)
-    """, (payload.book_id, today_str, payload.pages_read or 0, payload.minutes_read or 0, payload.notes or "Daily reading check-in"))
+    cursor.execute(
+        f"""
+        INSERT INTO reading_logs (user_id, book_id, date, pages_read, minutes_read, notes)
+        VALUES ({int(uid)}, ?, ?, ?, ?, ?)
+        """,
+        (payload.book_id, today_str, payload.pages_read or 0, payload.minutes_read or 0, payload.notes or "Daily reading check-in"),
+    )
     conn.commit()
 
-    newly_unlocked = check_and_unlock_achievements(conn)
+    newly_unlocked = check_and_unlock_achievements(conn, uid)
     conn.close()
 
     return {
@@ -4335,45 +4642,53 @@ class ToggleDayPayload(BaseModel):
 
 
 @app.post("/stats/quick-checkin")
-def quick_checkin_today():
+def quick_checkin_today(request: Request):
+    uid = get_request_user_id(request) or 0
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     today_str = datetime.date.today().isoformat()
-    cursor.execute("SELECT id, pages_read FROM reading_logs WHERE date = ?", (today_str,))
+    cursor.execute(f"SELECT id, pages_read FROM reading_logs WHERE date = ? AND user_id = {int(uid)}", (today_str,))
     row = cursor.fetchone()
     if row:
         action = "already_checked_in"
         msg = "You are already checked in for today! 🌟 Great job reading today!"
     else:
-        cursor.execute("INSERT INTO reading_logs (date, pages_read, minutes_read, notes) VALUES (?, 0, 0, 'Checked in for today ✅')", (today_str,))
+        cursor.execute(
+            f"INSERT INTO reading_logs (user_id, date, pages_read, minutes_read, notes) VALUES ({int(uid)}, ?, 0, 0, 'Checked in for today ✅')",
+            (today_str,),
+        )
         action = "created"
         msg = "Marked today on your reading calendar! 🌟 Great job reading today!"
     conn.commit()
-    newly_unlocked = check_and_unlock_achievements(conn)
+    newly_unlocked = check_and_unlock_achievements(conn, uid)
     conn.close()
     return {"status": "success", "action": action, "date": today_str, "message": msg, "newly_unlocked": newly_unlocked}
 
 
 @app.post("/stats/toggle-day")
-def toggle_reading_day(payload: ToggleDayPayload):
+def toggle_reading_day(payload: ToggleDayPayload, request: Request):
+    uid = get_request_user_id(request) or 0
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     d_str = payload.date.strip()
-    cursor.execute("SELECT id FROM reading_logs WHERE date = ?", (d_str,))
+    cursor.execute(f"SELECT id FROM reading_logs WHERE date = ? AND user_id = {int(uid)}", (d_str,))
     rows = cursor.fetchall()
     if rows:
-        cursor.execute("DELETE FROM reading_logs WHERE date = ?", (d_str,))
+        cursor.execute(f"DELETE FROM reading_logs WHERE date = ? AND user_id = {int(uid)}", (d_str,))
         state = "unlogged"
         msg = f"Removed reading log for {d_str}"
     else:
-        cursor.execute("""
-            INSERT INTO reading_logs (date, pages_read, minutes_read, notes)
-            VALUES (?, 0, 0, ?)
-        """, (d_str, payload.notes or "Calendar check-in"))
+        cursor.execute(
+            f"""
+            INSERT INTO reading_logs (user_id, date, pages_read, minutes_read, notes)
+            VALUES ({int(uid)}, ?, 0, 0, ?)
+            """,
+            (d_str, payload.notes or "Calendar check-in"),
+        )
         state = "logged"
         msg = f"Marked {d_str} as read!"
     conn.commit()
-    newly_unlocked = check_and_unlock_achievements(conn)
+    newly_unlocked = check_and_unlock_achievements(conn, uid)
     conn.close()
     return {"status": "success", "state": state, "message": msg, "date": d_str, "newly_unlocked": newly_unlocked}
 
@@ -4386,28 +4701,32 @@ class EditDayPayload(BaseModel):
 
 
 @app.post("/stats/edit-day")
-def edit_reading_day(payload: EditDayPayload):
+def edit_reading_day(payload: EditDayPayload, request: Request):
     d_str = payload.date.strip()
     if not d_str:
         raise HTTPException(status_code=400, detail="Date required")
+    uid = get_request_user_id(request) or 0
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute("SELECT id FROM reading_logs WHERE date = ?", (d_str,))
+    cursor.execute(f"SELECT id FROM reading_logs WHERE date = ? AND user_id = {int(uid)}", (d_str,))
     rows = cursor.fetchall()
 
     if payload.is_read:
         if not rows:
-            cursor.execute("INSERT INTO reading_logs (date, pages_read, minutes_read, notes) VALUES (?, 0, 0, ?)", (d_str, payload.notes or "Manual day edit"))
+            cursor.execute(
+                f"INSERT INTO reading_logs (user_id, date, pages_read, minutes_read, notes) VALUES ({int(uid)}, ?, 0, 0, ?)",
+                (d_str, payload.notes or "Manual day edit"),
+            )
             msg = f"Marked {d_str} as read!"
         else:
             msg = f"{d_str} was already logged as read."
     else:
-        cursor.execute("DELETE FROM reading_logs WHERE date = ?", (d_str,))
+        cursor.execute(f"DELETE FROM reading_logs WHERE date = ? AND user_id = {int(uid)}", (d_str,))
         # Also clear any date_read matching this date on books if desired
         msg = f"Unmarked {d_str} from reading logs."
 
     conn.commit()
-    newly_unlocked = check_and_unlock_achievements(conn)
+    newly_unlocked = check_and_unlock_achievements(conn, uid)
     conn.close()
     return {"status": "success", "message": msg, "date": d_str, "is_read": payload.is_read, "newly_unlocked": newly_unlocked}
 
@@ -4418,7 +4737,8 @@ class BatchDaysPayload(BaseModel):
 
 
 @app.post("/stats/batch-days")
-def batch_edit_reading_days(payload: BatchDaysPayload):
+def batch_edit_reading_days(payload: BatchDaysPayload, request: Request):
+    uid = get_request_user_id(request) or 0
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     count = 0
@@ -4426,16 +4746,19 @@ def batch_edit_reading_days(payload: BatchDaysPayload):
         d_str = d_str.strip()
         if not d_str:
             continue
-        cursor.execute("SELECT id FROM reading_logs WHERE date = ?", (d_str,))
+        cursor.execute(f"SELECT id FROM reading_logs WHERE date = ? AND user_id = {int(uid)}", (d_str,))
         exists = cursor.fetchone()
         if payload.is_read and not exists:
-            cursor.execute("INSERT INTO reading_logs (date, pages_read, minutes_read, notes) VALUES (?, 0, 0, 'Batch day edit')", (d_str,))
+            cursor.execute(
+                f"INSERT INTO reading_logs (user_id, date, pages_read, minutes_read, notes) VALUES ({int(uid)}, ?, 0, 0, 'Batch day edit')",
+                (d_str,),
+            )
             count += 1
         elif not payload.is_read and exists:
-            cursor.execute("DELETE FROM reading_logs WHERE date = ?", (d_str,))
+            cursor.execute(f"DELETE FROM reading_logs WHERE date = ? AND user_id = {int(uid)}", (d_str,))
             count += 1
     conn.commit()
-    newly_unlocked = check_and_unlock_achievements(conn)
+    newly_unlocked = check_and_unlock_achievements(conn, uid)
     conn.close()
     return {"status": "success", "message": f"Updated {count} reading days!", "count": count, "newly_unlocked": newly_unlocked}
 
@@ -4449,17 +4772,21 @@ class TimerSessionPayload(BaseModel):
 
 
 @app.post("/stats/log-timer-session")
-def log_timer_session(payload: TimerSessionPayload):
+def log_timer_session(payload: TimerSessionPayload, request: Request):
     mins = max(1, payload.minutes_read or payload.minutes or 1)
     d_str = (payload.date or datetime.date.today().isoformat()).strip()
+    uid = get_request_user_id(request) or 0
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO reading_logs (book_id, date, pages_read, minutes_read, notes)
-        VALUES (?, ?, 0, ?, ?)
-    """, (payload.book_id, d_str, mins, payload.notes or "Reading Timer Session"))
+    cursor.execute(
+        f"""
+        INSERT INTO reading_logs (user_id, book_id, date, pages_read, minutes_read, notes)
+        VALUES ({int(uid)}, ?, ?, 0, ?, ?)
+        """,
+        (payload.book_id, d_str, mins, payload.notes or "Reading Timer Session"),
+    )
     conn.commit()
-    newly_unlocked = check_and_unlock_achievements(conn)
+    newly_unlocked = check_and_unlock_achievements(conn, uid)
     conn.close()
     return {
         "status": "success",
@@ -4476,7 +4803,7 @@ class EnrichAllSpicePayload(BaseModel):
 
 
 @app.post("/books/enrich-spice-all")
-def enrich_all_books_spice(payload: Optional[EnrichAllSpicePayload] = None):
+def enrich_all_books_spice(payload: Optional[EnrichAllSpicePayload] = None, request: Request = None):
     force = payload.force if payload else False
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
@@ -4508,7 +4835,8 @@ def enrich_all_books_spice(payload: Optional[EnrichAllSpicePayload] = None):
             updated_count += 1
         conn.commit()
 
-    check_and_unlock_achievements(conn)
+    uid = get_request_user_id(request) or 0
+    check_and_unlock_achievements(conn, uid)
     conn.close()
     return {
         "status": "success",
@@ -4524,7 +4852,7 @@ class EnrichChunkPayload(BaseModel):
 
 
 @app.post("/books/enrich-spice-chunk")
-def enrich_books_spice_chunk(payload: EnrichChunkPayload):
+def enrich_books_spice_chunk(payload: EnrichChunkPayload, request: Request = None):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     if payload.force:
@@ -4554,7 +4882,8 @@ def enrich_books_spice_chunk(payload: EnrichChunkPayload):
         """, (spice, tropes, tropes, b_id))
         updated += 1
     conn.commit()
-    check_and_unlock_achievements(conn)
+    uid = get_request_user_id(request) or 0
+    check_and_unlock_achievements(conn, uid)
     conn.close()
     return {
         "status": "success",
@@ -4566,7 +4895,7 @@ def enrich_books_spice_chunk(payload: EnrichChunkPayload):
 
 
 @app.post("/books/{book_id}/enrich-spice")
-def enrich_single_book_spice(book_id: int):
+def enrich_single_book_spice(book_id: int, request: Request = None):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("SELECT title, author, tropes FROM books WHERE id = ?", (book_id,))
@@ -4581,7 +4910,8 @@ def enrich_single_book_spice(book_id: int):
     final_tropes = new_tropes if new_tropes else current_tropes
     cursor.execute("UPDATE books SET spice_rating = ?, tropes = ? WHERE id = ?", (spice, final_tropes, book_id))
     conn.commit()
-    check_and_unlock_achievements(conn)
+    uid = get_request_user_id(request) or 0
+    check_and_unlock_achievements(conn, uid)
     cursor.execute(f"SELECT {SELECT_COLS} FROM books WHERE id = ?", (book_id,))
     updated_row = cursor.fetchone()
     conn.close()
@@ -4634,12 +4964,14 @@ def get_oracle_external_recommendation(payload: OracleExternalPayload):
 
 
 @app.post("/oracle/chat-recommendation")
-def get_oracle_chat_recommendation(payload: OracleChatPayload):
+def get_oracle_chat_recommendation(payload: OracleChatPayload, request: Request):
+    uid = get_request_user_id(request)
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
 
     # Query books from user's library
-    cursor.execute(f"SELECT {SELECT_COLS} FROM books WHERE (deleted_at IS NULL OR deleted_at = '')")
+    ensure_effective_book_view(conn, uid)
+    cursor.execute(f"SELECT {SELECT_COLS} FROM books_eff WHERE (deleted_at IS NULL OR deleted_at = '')")
     all_rows = cursor.fetchall()
     conn.close()
     all_books = [row_to_book(r) for r in all_rows]
@@ -4859,12 +5191,14 @@ def import_scanned_files(payload: ImportScannedFilesPayload):
 
 
 @app.get("/stats/years")
-def get_available_stats_years():
+def get_available_stats_years(request: Request):
+    uid = get_request_user_id(request) or 0
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute("SELECT DISTINCT SUBSTR(date, 1, 4) FROM reading_logs WHERE date != ''")
+    ensure_effective_book_view(conn, uid)
+    cursor.execute(f"SELECT DISTINCT SUBSTR(date, 1, 4) FROM reading_logs WHERE user_id = {int(uid)} AND date != ''")
     years = {r[0] for r in cursor.fetchall() if r[0] and len(r[0]) == 4}
-    cursor.execute("SELECT DISTINCT SUBSTR(date_read, 1, 4) FROM books WHERE is_read = 1 AND date_read != ''")
+    cursor.execute("SELECT DISTINCT SUBSTR(date_read, 1, 4) FROM books_eff WHERE is_read = 1 AND date_read != ''")
     for r in cursor.fetchall():
         if r[0] and len(r[0]) == 4:
             years.add(r[0])
@@ -4877,20 +5211,22 @@ def get_available_stats_years():
 
 
 @app.get("/stats/overview")
-def get_stats_overview_endpoint(year: Optional[str] = "2026"):
+def get_stats_overview_endpoint(request: Request, year: Optional[str] = "2026"):
+    uid = get_request_user_id(request) or 0
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
+    ensure_effective_book_view(conn, uid)
 
     current_yr = str(datetime.date.today().year)
     target_year = (year or current_yr).strip().lower()
 
     # 1. Read books in year (excluding trashed books)
     if target_year == "all":
-        cursor.execute("SELECT id, title, author, media_type, duration, page_count, rating, spice_rating, pace, genres, date_read, series_name FROM books WHERE is_read = 1 AND (deleted_at IS NULL OR deleted_at = '')")
+        cursor.execute("SELECT id, title, author, media_type, duration, page_count, rating, spice_rating, pace, genres, date_read, series_name FROM books_eff WHERE is_read = 1 AND (deleted_at IS NULL OR deleted_at = '')")
     else:
         cursor.execute("""
             SELECT id, title, author, media_type, duration, page_count, rating, spice_rating, pace, genres, date_read, series_name
-            FROM books
+            FROM books_eff
             WHERE is_read = 1 AND (deleted_at IS NULL OR deleted_at = '') AND (date_read LIKE ? OR (date_read = '' AND ? = ?))
         """, (f"{target_year}%", target_year, current_yr))
     read_rows = cursor.fetchall()
@@ -4909,7 +5245,7 @@ def get_stats_overview_endpoint(year: Optional[str] = "2026"):
                 WHEN page_count > 0 AND progress_percent > 0 THEN CAST(ROUND(page_count * progress_percent / 100.0) AS INTEGER)
                 ELSE 0 
             END), 0)
-            FROM books
+            FROM books_eff
             WHERE is_read = 0 AND (deleted_at IS NULL OR deleted_at = '') AND (current_page > 0 OR progress_percent > 0)
         """)
         in_progress_pages = cursor.fetchone()[0] or 0
@@ -4929,7 +5265,7 @@ def get_stats_overview_endpoint(year: Optional[str] = "2026"):
     if target_year == "all" or target_year == current_yr:
         cursor.execute("""
             SELECT duration, current_audio_minutes, progress_percent
-            FROM books
+            FROM books_eff
             WHERE is_read = 0 AND media_type = 'audiobook' AND (deleted_at IS NULL OR deleted_at = '') AND (current_audio_minutes > 0 OR progress_percent > 0)
         """)
         for dur, cur_m, pct in cursor.fetchall():
@@ -4949,16 +5285,16 @@ def get_stats_overview_endpoint(year: Optional[str] = "2026"):
     audio_time_formatted = f"{aud_h}h {aud_m}m" if aud_h > 0 else f"{aud_m}m"
 
     # Reading Timer Metrics
-    cursor.execute("SELECT COALESCE(SUM(minutes_read), 0), COUNT(CASE WHEN minutes_read > 0 THEN 1 END) FROM reading_logs")
+    cursor.execute(f"SELECT COALESCE(SUM(minutes_read), 0), COUNT(CASE WHEN minutes_read > 0 THEN 1 END) FROM reading_logs WHERE user_id = {int(uid)}")
     t_row = cursor.fetchone()
     total_timer_minutes = t_row[0] or 0
     timer_sessions_count = t_row[1] or 0
     total_timer_hours = round(total_timer_minutes / 60.0, 1)
 
     # 3. Days Read (No streaks)
-    cursor.execute("SELECT DISTINCT date FROM reading_logs ORDER BY date DESC")
+    cursor.execute(f"SELECT DISTINCT date FROM reading_logs WHERE user_id = {int(uid)} ORDER BY date DESC")
     log_dates = {row[0] for row in cursor.fetchall()}
-    cursor.execute("SELECT DISTINCT date_read FROM books WHERE is_read = 1 AND date_read != ''")
+    cursor.execute("SELECT DISTINCT date_read FROM books_eff WHERE is_read = 1 AND date_read != ''")
     for r in cursor.fetchall():
         log_dates.add(r[0])
 
@@ -4994,7 +5330,7 @@ def get_stats_overview_endpoint(year: Optional[str] = "2026"):
     if target_year == "all":
         cursor.execute("""
             SELECT author, COUNT(*) as read_cnt
-            FROM books
+            FROM books_eff
             WHERE is_read = 1
             GROUP BY author
             ORDER BY read_cnt DESC, author ASC
@@ -5002,7 +5338,7 @@ def get_stats_overview_endpoint(year: Optional[str] = "2026"):
     else:
         cursor.execute("""
             SELECT author, COUNT(*) as read_cnt
-            FROM books
+            FROM books_eff
             WHERE is_read = 1 AND (date_read LIKE ? OR (date_read = '' AND ? = ?))
             GROUP BY author
             ORDER BY read_cnt DESC, author ASC
@@ -5012,7 +5348,7 @@ def get_stats_overview_endpoint(year: Optional[str] = "2026"):
     # 6. Series Completion Tracker & Missing Books
     cursor.execute("""
         SELECT id, title, author, series_name, series_number, is_read, reading_status, media_type
-        FROM books
+        FROM books_eff
         WHERE series_name != ''
     """)
     all_series_books = cursor.fetchall()
@@ -5184,8 +5520,9 @@ def get_stats_overview_endpoint(year: Optional[str] = "2026"):
     cursor.execute("""
         SELECT badge_id, name, description, icon, category, unlocked_at, reward_title
         FROM user_achievements
+        WHERE user_id = ?
         ORDER BY CASE WHEN unlocked_at IS NOT NULL THEN 0 ELSE 1 END, badge_id ASC
-    """)
+    """, (uid,))
     badges = []
     for r in cursor.fetchall():
         badges.append({
@@ -5245,9 +5582,9 @@ def get_stats_overview_endpoint(year: Optional[str] = "2026"):
     for m_idx in range(1, 13):
         m_str = f"{m_idx:02d}"
         if target_year == "all":
-            cursor.execute("SELECT SUM(page_count), COUNT(*) FROM books WHERE is_read = 1 AND (deleted_at IS NULL OR deleted_at = '') AND date_read LIKE ?", (f"____-{m_str}-%",))
+            cursor.execute("SELECT SUM(page_count), COUNT(*) FROM books_eff WHERE is_read = 1 AND (deleted_at IS NULL OR deleted_at = '') AND date_read LIKE ?", (f"____-{m_str}-%",))
         else:
-            cursor.execute("SELECT SUM(page_count), COUNT(*) FROM books WHERE is_read = 1 AND (deleted_at IS NULL OR deleted_at = '') AND date_read LIKE ?", (f"{target_year}-{m_str}-%",))
+            cursor.execute("SELECT SUM(page_count), COUNT(*) FROM books_eff WHERE is_read = 1 AND (deleted_at IS NULL OR deleted_at = '') AND date_read LIKE ?", (f"{target_year}-{m_str}-%",))
         m_book_res = cursor.fetchone()
         m_book_pages = m_book_res[0] or 0
         m_books_count = m_book_res[1] or 0
@@ -5272,7 +5609,7 @@ def get_stats_overview_endpoint(year: Optional[str] = "2026"):
     weekday_distribution = [{"day": day_names[i], "day_short": day_names[i][:3], "count": day_counts[i]} for i in range(7)]
 
     # Calendar dates map with pages and minutes
-    cursor.execute("SELECT date, SUM(pages_read), SUM(minutes_read), COUNT(*) FROM reading_logs GROUP BY date")
+    cursor.execute(f"SELECT date, SUM(pages_read), SUM(minutes_read), COUNT(*) FROM reading_logs WHERE user_id = {int(uid)} GROUP BY date")
     calendar_logs = {r[0]: {"pages": r[1] or 0, "minutes": r[2] or 0, "sessions": r[3]} for r in cursor.fetchall()}
     for d_str in log_dates:
         if d_str not in calendar_logs:
@@ -5473,7 +5810,8 @@ def extract_calibre_books(db_path: str):
             pass
 
 @app.post("/import/calibre/scan")
-def import_calibre_from_folder(payload: CalibreScanPayload):
+def import_calibre_from_folder(payload: CalibreScanPayload, request: Request):
+    uid = get_request_user_id(request) or 0
     folder = payload.folder_path.strip().strip('"').strip("'")
     if not os.path.exists(folder):
         raise HTTPException(status_code=400, detail=f"Folder not found: {folder}")
@@ -5600,7 +5938,8 @@ def import_calibre_from_folder(payload: CalibreScanPayload):
         except Exception:
             pass
 
-    check_and_unlock_achievements(conn)
+    adopt_books_into_user_state(conn, uid)
+    check_and_unlock_achievements(conn, uid)
     conn.commit()
     conn.close()
 
@@ -5613,7 +5952,8 @@ def import_calibre_from_folder(payload: CalibreScanPayload):
     }
 
 @app.post("/import/calibre/upload-db")
-async def import_calibre_uploaded_db(file: UploadFile = File(...)):
+async def import_calibre_uploaded_db(request: Request, file: UploadFile = File(...)):
+    uid = get_request_user_id(request) or 0
     filename_lower = (file.filename or "").lower()
     content = await file.read()
     if not (filename_lower.endswith((".db", ".sqlite", ".sqlite3")) or content.startswith(b"SQLite format 3\x00")):
@@ -5677,7 +6017,8 @@ async def import_calibre_uploaded_db(file: UploadFile = File(...)):
             ))
             imported_count += 1
 
-    check_and_unlock_achievements(conn)
+    adopt_books_into_user_state(conn, uid)
+    check_and_unlock_achievements(conn, uid)
     conn.commit()
     conn.close()
 
@@ -5744,7 +6085,8 @@ class AudiobookshelfSyncPayload(BaseModel):
     sync_progress: Optional[bool] = True
 
 @app.post("/import/audiobookshelf/sync")
-def sync_audiobookshelf(payload: AudiobookshelfSyncPayload):
+def sync_audiobookshelf(payload: AudiobookshelfSyncPayload, request: Request):
+    uid = get_request_user_id(request) or 0
     url, detected_lib = clean_abs_url_and_lib(payload.server_url)
     effective_lib_id = payload.library_id or detected_lib
 
@@ -5885,7 +6227,8 @@ def sync_audiobookshelf(payload: AudiobookshelfSyncPayload):
                 ))
                 imported_count += 1
 
-    check_and_unlock_achievements(conn)
+    adopt_books_into_user_state(conn, uid)
+    check_and_unlock_achievements(conn, uid)
     conn.commit()
     conn.close()
 
@@ -5899,7 +6242,7 @@ def sync_audiobookshelf(payload: AudiobookshelfSyncPayload):
 
 # --- FABLE BOOK APP IMPORTER ---
 
-def process_fable_records(rows):
+def process_fable_records(rows, user_id: Optional[int] = None):
     conn = sqlite3.connect(DB_FILE)
     cur = conn.cursor()
     cur.execute("SELECT id, title, author, rating, review, reading_status FROM books")
@@ -5971,7 +6314,8 @@ def process_fable_records(rows):
             ))
             imported_count += 1
 
-    check_and_unlock_achievements(conn)
+    adopt_books_into_user_state(conn, user_id or 0)
+    check_and_unlock_achievements(conn, user_id or 0)
     conn.commit()
     conn.close()
 
@@ -6023,7 +6367,8 @@ def parse_fable_csv_text(text: str):
     return records
 
 @app.post("/import/fable/upload")
-async def import_fable_file(file: UploadFile = File(...)):
+async def import_fable_file(request: Request, file: UploadFile = File(...)):
+    uid = get_request_user_id(request)
     raw_bytes = await file.read()
     try:
         text = raw_bytes.decode("utf-8")
@@ -6053,7 +6398,7 @@ async def import_fable_file(file: UploadFile = File(...)):
     if not records:
         raise HTTPException(status_code=400, detail="No valid book records found in uploaded file. Check headers.")
 
-    imp_cnt, upd_cnt = process_fable_records(records)
+    imp_cnt, upd_cnt = process_fable_records(records, uid)
     return {
         "status": "success",
         "message": f"Successfully processed Fable export! Imported {imp_cnt} new books and updated {upd_cnt} existing library books.",
@@ -6066,11 +6411,12 @@ class FableTextPayload(BaseModel):
     csv_text: str
 
 @app.post("/import/fable/paste")
-def import_fable_pasted_text(payload: FableTextPayload):
+def import_fable_pasted_text(payload: FableTextPayload, request: Request):
+    uid = get_request_user_id(request)
     records = parse_fable_csv_text(payload.csv_text)
     if not records:
         raise HTTPException(status_code=400, detail="Could not parse any rows from pasted CSV text.")
-    imp_cnt, upd_cnt = process_fable_records(records)
+    imp_cnt, upd_cnt = process_fable_records(records, uid)
     return {
         "status": "success",
         "message": f"Successfully processed Fable data! Imported {imp_cnt} new books and updated {upd_cnt} existing library books.",
@@ -6163,7 +6509,7 @@ def auth_status(request: Request):
     }
 
 @app.post("/auth/register")
-def auth_register(payload: RegisterPayload, response: Response):
+def auth_register(payload: RegisterPayload, request: Request, response: Response):
     u = payload.username.strip()
     p = payload.password.strip()
     d = (payload.display_name or "").strip()
@@ -6180,6 +6526,18 @@ def auth_register(payload: RegisterPayload, response: Response):
     cur = conn.cursor()
     cur.execute("SELECT COUNT(*) FROM users")
     count = cur.fetchone()[0]
+
+    # Self-registration is only allowed for the very first (admin) account.
+    # After that, only an authenticated administrator may create accounts.
+    if count > 0:
+        current = get_current_user_from_request(request)
+        if not current or current.get("role") != "admin":
+            conn.close()
+            raise HTTPException(
+                status_code=403,
+                detail="Self-registration is disabled. Ask the library administrator to create your account."
+            )
+
     role = "admin" if count == 0 else "reader"
     disp_name = d if d else u
 
@@ -6189,6 +6547,7 @@ def auth_register(payload: RegisterPayload, response: Response):
             VALUES (?, ?, ?, ?, ?)
         """, (u, p_hash, salt, disp_name, role))
         user_id = cur.lastrowid
+        seed_user_badges(conn, user_id)
         conn.commit()
     except sqlite3.IntegrityError:
         conn.close()
@@ -6392,6 +6751,7 @@ def admin_create_user(payload: AdminCreateUserPayload, request: Request):
             VALUES (?, ?, ?, ?, ?)
         """, (u, p_hash, salt, disp_name, role))
         user_id = cur.lastrowid
+        seed_user_badges(conn, user_id)
         conn.commit()
     except sqlite3.IntegrityError:
         conn.close()
@@ -6456,6 +6816,9 @@ def admin_delete_user(user_id: int, request: Request):
     conn = sqlite3.connect(DB_FILE)
     cur = conn.cursor()
     cur.execute("DELETE FROM user_sessions WHERE user_id = ?", (user_id,))
+    cur.execute("DELETE FROM user_book_state WHERE user_id = ?", (user_id,))
+    cur.execute("DELETE FROM reading_logs WHERE user_id = ?", (user_id,))
+    cur.execute("DELETE FROM user_achievements WHERE user_id = ?", (user_id,))
     cur.execute("DELETE FROM users WHERE id = ?", (user_id,))
     conn.commit()
     conn.close()
