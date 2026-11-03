@@ -3712,155 +3712,8 @@
 
 </style>
 <style id="dynamicCustomThemeStyle">/* Dynamic Custom User Themes Injected Here */</style>
-<style>
-  /* ---- FULL-PAGE LOGIN GATE ---- */
-  #loginGate {
-    position: fixed;
-    inset: 0;
-    z-index: 100000;
-    display: none;
-    align-items: center;
-    justify-content: center;
-    padding: 1.5rem;
-    background: radial-gradient(circle at 30% 15%, #241a4d 0%, #120a24 45%, #05030d 100%);
-  }
-  #loginGate .login-gate-card {
-    width: 100%;
-    max-width: 420px;
-    background: rgba(17, 12, 34, 0.94);
-    border: 1px solid rgba(168, 85, 247, 0.35);
-    border-radius: 18px;
-    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.75), 0 0 48px rgba(139, 92, 246, 0.18);
-    padding: 2rem 1.85rem;
-  }
-  #loginGate .login-gate-brand {
-    text-align: center;
-    margin-bottom: 1.35rem;
-  }
-  #loginGate .login-gate-icon {
-    font-size: 2.6rem;
-    line-height: 1;
-    margin-bottom: 0.5rem;
-  }
-  #loginGate .login-gate-brand h1 {
-    font-family: 'Cinzel', serif;
-    font-size: 1.55rem;
-    font-weight: 800;
-    margin: 0;
-    background: linear-gradient(135deg, #ffffff, #c084fc);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-  }
-  #loginGate .login-gate-brand p {
-    margin: 0.4rem 0 0 0;
-    font-size: 0.82rem;
-    color: #a78bfa;
-  }
-  #loginGate .login-gate-label {
-    display: block;
-    font-size: 0.72rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: #c4b5fd;
-    margin: 0.85rem 0 0.35rem 0;
-  }
-  #loginGate .login-gate-input {
-    width: 100%;
-    padding: 0.62rem 0.8rem;
-    border-radius: 10px;
-    border: 1px solid rgba(168, 85, 247, 0.35);
-    background: rgba(0, 0, 0, 0.45);
-    color: #ffffff;
-    font-size: 0.92rem;
-    box-sizing: border-box;
-  }
-  #loginGate .login-gate-input:focus {
-    outline: none;
-    border-color: #a855f7;
-    box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.2);
-  }
-  #loginGate .login-gate-btn {
-    width: 100%;
-    margin-top: 1.25rem;
-    padding: 0.72rem 1rem;
-    border: none;
-    border-radius: 10px;
-    font-size: 0.95rem;
-    font-weight: 800;
-    color: #ffffff;
-    cursor: pointer;
-    background: linear-gradient(135deg, #8b5cf6, #ec4899);
-    box-shadow: 0 4px 18px rgba(139, 92, 246, 0.4);
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
-  }
-  #loginGate .login-gate-btn:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 8px 26px rgba(139, 92, 246, 0.55);
-  }
-  #loginGate .login-gate-btn:disabled {
-    opacity: 0.7;
-    cursor: default;
-    transform: none;
-  }
-  #loginGate .login-gate-error {
-    min-height: 1rem;
-    margin-top: 0.7rem;
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: #fca5a5;
-    text-align: center;
-  }
-  #loginGate .login-gate-hint {
-    margin-top: 1rem;
-    font-size: 0.8rem;
-    color: #94a3b8;
-    text-align: center;
-  }
-  #loginGate .login-gate-hint a {
-    color: #c084fc;
-    font-weight: 700;
-    text-decoration: none;
-  }
-  #loginGate .login-gate-hint a:hover {
-    text-decoration: underline;
-  }
-</style>
 </head>
 <body>
-
-  <!-- FULL-PAGE LOGIN GATE (shown to signed-out visitors) -->
-  <div id="loginGate">
-    <div class="login-gate-card">
-      <div class="login-gate-brand">
-        <div class="login-gate-icon">🌌</div>
-        <h1>House of Wind</h1>
-        <p id="loginGateSubtitle">Sign in to enter your library</p>
-      </div>
-
-      <form id="loginGateSignInForm" onsubmit="submitLoginGateSignIn(event)">
-        <label class="login-gate-label" for="loginGateUsername">Username</label>
-        <input id="loginGateUsername" class="login-gate-input" type="text" autocomplete="username" required />
-        <label class="login-gate-label" for="loginGatePassword">Password</label>
-        <input id="loginGatePassword" class="login-gate-input" type="password" autocomplete="current-password" required />
-        <button type="submit" id="loginGateSignInBtn" class="login-gate-btn">Sign In ✨</button>
-        <div id="loginGateError" class="login-gate-error"></div>
-        <div class="login-gate-hint">Need an account? Ask the library administrator to create one for you.</div>
-      </form>
-
-      <form id="loginGateRegisterForm" onsubmit="submitLoginGateRegister(event)" style="display:none;">
-        <label class="login-gate-label" for="loginGateRegUsername">Username</label>
-        <input id="loginGateRegUsername" class="login-gate-input" type="text" autocomplete="username" required />
-        <label class="login-gate-label" for="loginGateRegDisplay">Display Name</label>
-        <input id="loginGateRegDisplay" class="login-gate-input" type="text" placeholder="e.g. Alex" />
-        <label class="login-gate-label" for="loginGateRegPassword">Password</label>
-        <input id="loginGateRegPassword" class="login-gate-input" type="password" autocomplete="new-password" required />
-        <button type="submit" id="loginGateRegisterBtn" class="login-gate-btn">Create Account ✨</button>
-        <div id="loginGateRegError" class="login-gate-error"></div>
-        <div class="login-gate-hint">Already have an account? <a href="#" onclick="switchLoginGate('signin'); return false;">Sign in</a></div>
-      </form>
-    </div>
-  </div>
 
   <!-- LEFT SIDEBAR NAVIGATION -->
   <aside class="sidebar">
@@ -3975,55 +3828,79 @@
             <span style="font-size:0.7rem; transition:transform 0.2s;" id="menuArrow">▼</span>
           </button>
           <div class="menu-dropdown-pane" id="menuDropdownPane">
-            <div class="menu-dropdown-header">Tools & Actions</div>
-            <button class="menu-dropdown-item" onclick="openFolderScannerModal(); closeMenuDropdown();">
-              <span class="menu-icon">📂</span>
-              <div>
-                <div class="menu-title">Scan Computer Folder</div>
-                <div class="menu-desc">Find & import books from any PC directory</div>
-              </div>
-            </button>
-            <button class="menu-dropdown-item" onclick="openDirectImportModal(); closeMenuDropdown();">
-              <span class="menu-icon">📥</span>
-              <div>
-                <div class="menu-title">Direct Upload</div>
-                <div class="menu-desc">Import from OceanofPDF, ABB or drop folder</div>
-              </div>
-            </button>
+            <div class="menu-dropdown-header">Upload &amp; Import</div>
             <button class="menu-dropdown-item" onclick="openMassUploadModal(); closeMenuDropdown();">
               <span class="menu-icon">📦</span>
               <div>
                 <div class="menu-title">Mass / Batch Upload</div>
-                <div class="menu-desc">Upload multiple ebooks & audiobooks</div>
+                <div class="menu-desc">Upload multiple ebooks &amp; audiobooks at once</div>
               </div>
             </button>
             <button class="menu-dropdown-item" onclick="openUploadModal('ebook'); closeMenuDropdown();">
               <span class="menu-icon">📖</span>
               <div>
                 <div class="menu-title">Upload Ebook</div>
-                <div class="menu-desc">Add .epub, .pdf, .mobi with metadata</div>
+                <div class="menu-desc">Add .epub, .pdf, .mobi with automatic metadata</div>
               </div>
             </button>
             <button class="menu-dropdown-item" onclick="openUploadModal('audiobook'); closeMenuDropdown();">
               <span class="menu-icon">🎧</span>
               <div>
                 <div class="menu-title">Upload Audiobook</div>
-                <div class="menu-desc">Add .m4b, .mp3 audio file</div>
+                <div class="menu-desc">Add .m4b, .mp3 audio file with chapter/duration sync</div>
               </div>
             </button>
+            <button class="menu-dropdown-item" onclick="openFolderScannerModal(); closeMenuDropdown();">
+              <span class="menu-icon">📂</span>
+              <div>
+                <div class="menu-title">Scan Computer Folder</div>
+                <div class="menu-desc">Find &amp; import books from any PC or NAS directory</div>
+              </div>
+            </button>
+            <button class="menu-dropdown-item" onclick="openDirectImportModal(); closeMenuDropdown();">
+              <span class="menu-icon">📥</span>
+              <div>
+                <div class="menu-title">Direct Upload / Import Drop</div>
+                <div class="menu-desc">Import from OceanofPDF, ABB or drop folder</div>
+              </div>
+            </button>
+            <button class="menu-dropdown-item" onclick="openImportHubModal(); closeMenuDropdown();">
+              <span class="menu-icon">🔄</span>
+              <div>
+                <div class="menu-title">Import &amp; Sync Hub</div>
+                <div class="menu-desc">Connect Calibre library, Audiobookshelf &amp; Fable</div>
+              </div>
+            </button>
+
+            <div class="menu-dropdown-header" style="margin-top:0.5rem;">Devices &amp; Delivery</div>
+            <button class="menu-dropdown-item" onclick="openSendDeviceModal(); closeMenuDropdown();">
+              <span class="menu-icon">📤</span>
+              <div>
+                <div class="menu-title">Send to Device / Kindle</div>
+                <div class="menu-desc">QR code Wi-Fi transfer &amp; wireless Kindle delivery</div>
+              </div>
+            </button>
+            <button class="menu-dropdown-item" onclick="openSettingsModal(); closeMenuDropdown();">
+              <span class="menu-icon">⚙️</span>
+              <div>
+                <div class="menu-title">Kindle &amp; Server Settings</div>
+                <div class="menu-desc">Configure SMTP email, Kindle address &amp; Gemini AI</div>
+              </div>
+            </button>
+
+            <div class="menu-dropdown-header" style="margin-top:0.5rem;">Library Tools</div>
             <button class="menu-dropdown-item" onclick="triggerAutoEnrichSpice(); closeMenuDropdown();">
               <span class="menu-icon">🌶️</span>
               <div>
                 <div class="menu-title">Auto-Enrich Romance.io Spice</div>
-                <div class="menu-desc">Fetch steam ratings & tropes for all library books</div>
+                <div class="menu-desc">Fetch steam ratings &amp; tropes for library books</div>
               </div>
             </button>
-            <div class="menu-dropdown-divider"></div>
             <button class="menu-dropdown-item" onclick="openThemePickerModal(); closeMenuDropdown();">
               <span class="menu-icon">🎨</span>
               <div>
-                <div class="menu-title">Themes & Colors</div>
-                <div class="menu-desc">Whimsigoth, Fairy, Academia & Pastel palettes</div>
+                <div class="menu-title">Themes &amp; Colors</div>
+                <div class="menu-desc">Whimsigoth, Fairy, Academia, High Fantasy &amp; Pastel</div>
               </div>
             </button>
             <button class="menu-dropdown-item" onclick="switchView('trash'); closeMenuDropdown();">
@@ -4033,25 +3910,20 @@
                 <div class="menu-desc">View or restore recently deleted books</div>
               </div>
             </button>
-            <button class="menu-dropdown-item" onclick="openSettingsModal(); closeMenuDropdown();">
-              <span class="menu-icon">📱</span>
-              <div>
-                <div class="menu-title">Send to Kindle & Settings</div>
-                <div class="menu-desc">Configure SMTP, Kindle email & Gemini key</div>
-              </div>
-            </button>
+
+            <div class="menu-dropdown-divider"></div>
             <a class="menu-dropdown-item" href="/docs" target="_blank" onclick="closeMenuDropdown();">
               <span class="menu-icon">⚡</span>
               <div>
                 <div class="menu-title">FastAPI /docs</div>
-                <div class="menu-desc">Interactive Swagger API documentation</div>
+                <div class="menu-desc">Interactive Swagger REST API documentation</div>
               </div>
             </a>
             <a class="menu-dropdown-item" href="/opds" target="_blank" onclick="closeMenuDropdown();">
               <span class="menu-icon">📡</span>
               <div>
                 <div class="menu-title">OPDS Catalog Feed</div>
-                <div class="menu-desc">Connect reader apps directly</div>
+                <div class="menu-desc">Connect Moon+ Reader, KOReader &amp; Marvin directly</div>
               </div>
             </a>
           </div>
@@ -4557,6 +4429,12 @@
       <div class="modal-header">
         <h2 id="sendDeviceModalTitle">📤 Send to Device / Kindle</h2>
         <button class="close-btn" onclick="closeSendDeviceModal()">×</button>
+      </div>
+
+      <!-- Book Selector Row when opened from menu or switching books -->
+      <div id="sendDeviceBookPickerRow" style="margin-bottom:1rem; padding:0.65rem 0.85rem; background:rgba(255,255,255,0.04); border:1px solid rgba(168,85,247,0.25); border-radius:8px;">
+        <label for="sendDeviceBookSelect" style="display:block; font-size:0.75rem; font-weight:700; color:#c084fc; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.35rem;">Choose Book to Send:</label>
+        <select id="sendDeviceBookSelect" onchange="onSendDeviceBookChange(this.value)" style="width:100%; padding:0.5rem 0.65rem; border-radius:6px; background:#0f172a; color:#f8fafc; border:1px solid rgba(168,85,247,0.35); font-size:0.86rem;"></select>
       </div>
 
       <div class="modal-tabs">
@@ -8340,12 +8218,39 @@
     }
 
     async function openSendDeviceModal(bookId) {
-      const book = allBooks.find(b => b.id === bookId);
+      if (!allBooks || allBooks.length === 0) {
+        showToast("No books available in library yet.");
+        return;
+      }
+
+      // Populate book selector dropdown
+      const sel = document.getElementById("sendDeviceBookSelect");
+      if (sel) {
+        sel.innerHTML = allBooks.map(b => {
+          const hasFile = b.has_file || b.filename;
+          const mark = hasFile ? "📁 " : "📖 ";
+          const author = b.author ? ` (${escapeHtml(b.author)})` : "";
+          return `<option value="${b.id}">${mark}${escapeHtml(b.title)}${author}</option>`;
+        }).join("");
+      }
+
+      // If no bookId was specified, choose the first book with a file, or active details book, or first book
+      if (!bookId) {
+        if (typeof currentDetailsBookId !== "undefined" && currentDetailsBookId) {
+          bookId = currentDetailsBookId;
+        } else {
+          const withFile = allBooks.find(b => b.has_file || b.filename);
+          bookId = withFile ? withFile.id : allBooks[0].id;
+        }
+      }
+
+      const book = allBooks.find(b => b.id === bookId) || allBooks[0];
       if (!book) return;
-      activeSendBookId = bookId;
+      activeSendBookId = book.id;
+      if (sel) sel.value = String(book.id);
 
       const modal = document.getElementById("sendDeviceModal");
-      document.getElementById("sendBookName").textContent = `${book.title} — ${book.author}`;
+      document.getElementById("sendBookName").textContent = `${book.title} — ${book.author || "Unknown"}`;
       document.getElementById("sendDeviceModalTitle").textContent = `📤 Send to Device: "${book.title}"`;
       document.getElementById("sendKindleStatusMsg").style.display = "none";
 
@@ -8365,6 +8270,26 @@
 
       switchSendTab("qr");
       modal.classList.add("open");
+    }
+
+    function onSendDeviceBookChange(val) {
+      const bookId = parseInt(val, 10);
+      if (!bookId) return;
+      const book = allBooks.find(b => b.id === bookId);
+      if (!book) return;
+      activeSendBookId = book.id;
+
+      document.getElementById("sendBookName").textContent = `${book.title} — ${book.author || "Unknown"}`;
+      document.getElementById("sendDeviceModalTitle").textContent = `📤 Send to Device: "${book.title}"`;
+      document.getElementById("sendKindleStatusMsg").style.display = "none";
+
+      const localIp = cachedDeviceInfo?.local_ip || window.location.hostname;
+      const port = cachedDeviceInfo?.port || window.location.port || "8000";
+      const downloadUrl = `http://${localIp}:${port}/books/${book.id}/download`;
+
+      document.getElementById("sendDeviceUrl").value = downloadUrl;
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(downloadUrl)}`;
+      document.getElementById("deviceQrImage").src = qrUrl;
     }
 
     function closeSendDeviceModal() {
@@ -13099,112 +13024,9 @@
           currentUser = authStatus.user || null;
           renderUserMenu();
           updateRoleRestrictedUI();
-          if (!authStatus.logged_in) {
-            showLoginGate(authStatus.has_users ? "signin" : "register");
-          } else {
-            hideLoginGate();
-          }
         }
       } catch (err) {
         console.warn("Auth status check failed", err);
-      }
-    }
-
-    // ---- Full-page login gate helpers ----
-    function showLoginGate(mode) {
-      const gate = document.getElementById("loginGate");
-      if (!gate) return;
-      const subtitle = document.getElementById("loginGateSubtitle");
-      if (!authStatus.has_users) {
-        mode = "register";
-        if (subtitle) subtitle.textContent = "Create the administrator account to get started";
-      } else if (subtitle) {
-        subtitle.textContent = "Sign in to enter your library";
-      }
-      switchLoginGate(mode);
-      gate.style.display = "flex";
-    }
-
-    function hideLoginGate() {
-      const gate = document.getElementById("loginGate");
-      if (gate) gate.style.display = "none";
-    }
-
-    function switchLoginGate(mode) {
-      const signIn = document.getElementById("loginGateSignInForm");
-      const register = document.getElementById("loginGateRegisterForm");
-      if (!signIn || !register) return;
-      if (mode === "register") {
-        signIn.style.display = "none";
-        register.style.display = "block";
-      } else {
-        signIn.style.display = "block";
-        register.style.display = "none";
-      }
-    }
-
-    async function submitLoginGateSignIn(event) {
-      event.preventDefault();
-      const u = document.getElementById("loginGateUsername").value.trim();
-      const p = document.getElementById("loginGatePassword").value;
-      const btn = document.getElementById("loginGateSignInBtn");
-      const errEl = document.getElementById("loginGateError");
-      errEl.textContent = "";
-      btn.disabled = true;
-      btn.textContent = "Signing In...";
-      try {
-        const res = await fetch("/auth/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username: u, password: p })
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || "Invalid login credentials");
-        if (data.token) {
-          localStorage.setItem("book_app_session_token", data.token);
-        }
-        hideLoginGate();
-        showToast(data.message || `Welcome back, ${data.user.display_name}! ✨`);
-        await checkAuthStatus();
-        await loadBooks();
-      } catch (err) {
-        errEl.textContent = err.message;
-      } finally {
-        btn.disabled = false;
-        btn.textContent = "Sign In ✨";
-      }
-    }
-
-    async function submitLoginGateRegister(event) {
-      event.preventDefault();
-      const u = document.getElementById("loginGateRegUsername").value.trim();
-      const d = document.getElementById("loginGateRegDisplay").value.trim();
-      const p = document.getElementById("loginGateRegPassword").value;
-      const btn = document.getElementById("loginGateRegisterBtn");
-      const errEl = document.getElementById("loginGateRegError");
-      errEl.textContent = "";
-      btn.disabled = true;
-      btn.textContent = "Creating Account...";
-      try {
-        const res = await fetch("/auth/register", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username: u, display_name: d, password: p })
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || "Registration failed");
-        if (data.token) {
-          localStorage.setItem("book_app_session_token", data.token);
-        }
-        hideLoginGate();
-        showToast(data.message || "Account created! ✨");
-        await checkAuthStatus();
-        await loadBooks();
-      } catch (err) {
-        errEl.textContent = err.message;
-      } finally {
-        btn.disabled = false;
-        btn.textContent = "Create Account ✨";
       }
     }
 
@@ -13428,8 +13250,12 @@
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || "Invalid login credentials");
 
+        if (data.token) {
+          localStorage.setItem("book_app_session_token", data.token);
+        }
+
         closeAuthModal();
-        showToast(data.message || `Welcome, ${data.user.display_name}! ✨`);
+        showToast(data.message || `Welcome back, ${data.user.display_name}! ✨`);
         await checkAuthStatus();
         await loadBooks();
       } catch (err) {
@@ -13458,6 +13284,10 @@
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || "Registration failed");
 
+        if (data.token) {
+          localStorage.setItem("book_app_session_token", data.token);
+        }
+
         closeAuthModal();
         showToast(data.message || `Account created! Logged in as ${data.user.role.toUpperCase()} ✨`);
         await checkAuthStatus();
@@ -13475,10 +13305,8 @@
         localStorage.removeItem("book_app_session_token");
         await fetch("/auth/logout", { method: "POST" });
         showToast("Signed out successfully.");
-        allBooks = [];
-        const bc = document.getElementById("bookContainer");
-        if (bc) bc.innerHTML = "";
         await checkAuthStatus();
+        await loadBooks();
       } catch (err) {
         console.warn("Logout error", err);
       }
@@ -13660,9 +13488,7 @@
     initTheme();
     (async () => {
       await checkAuthStatus();
-      if (authStatus.logged_in) {
-        await loadBooks();
-      }
+      await loadBooks();
     })();
   </script>
 

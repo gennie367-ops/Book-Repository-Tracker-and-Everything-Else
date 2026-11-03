@@ -1,4 +1,4 @@
-from concurrent.futures import ThreadPoolExecutor
+﻿from concurrent.futures import ThreadPoolExecutor
 import csv
 import datetime
 import hashlib
@@ -58,48 +58,9 @@ if DATA_DIR:
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
-# --- ACCESS CONTROL: require a signed-in account for library data/actions ---
-# The login page, its static assets, and the auth endpoints stay public so a
-# visitor can sign in. Everything else (books, uploads, stats, trash, admin,
-# streaming/downloads) requires a valid session cookie or bearer token.
-PUBLIC_PATHS = {
-    "/",
-    "/index.html",
-    "/favicon.ico",
-    "/auth/status",
-    "/auth/login",
-    "/auth/logout",
-    "/auth/register",
-    "/health",
-}
-PUBLIC_PREFIXES = ("/static/",)
-
-
-@app.middleware("http")
-async def require_authentication(request: Request, call_next):
-    path = request.url.path
-    if request.method == "OPTIONS" or path in PUBLIC_PATHS or path.startswith(PUBLIC_PREFIXES):
-        return await call_next(request)
-
-    # Before the first account exists, allow access so first-run setup works.
-    try:
-        conn = sqlite3.connect(DB_FILE)
-        cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) FROM users")
-        user_count = cur.fetchone()[0]
-        conn.close()
-    except Exception:
-        user_count = 0
-    if user_count == 0:
-        return await call_next(request)
-
-    user = get_current_user_from_request(request)
-    if not user:
-        return JSONResponse(
-            status_code=401,
-            content={"detail": "Authentication required. Please sign in to access the library."}
-        )
-    return await call_next(request)
+# --- ACCESS CONTROL: Role-based permissions ---
+# Readers and unauthenticated visitors can view, search, read, and upload files.
+# Deletions, trash emptying, and user administration are strictly protected by require_admin_to_delete().
 
 
 AUDIO_EXTENSIONS = {".m4b", ".mp3", ".m4a", ".flac", ".ogg", ".opus", ".aac", ".wav"}
