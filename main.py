@@ -161,6 +161,20 @@ USER_STATE_CLEAR_SQL = (
 )
 
 
+def hash_user_password(password: str, salt: str) -> str:
+    return hashlib.pbkdf2_hmac(
+        'sha256',
+        password.encode('utf-8'),
+        salt.encode('utf-8'),
+        100000
+    ).hex()
+
+
+def verify_user_password(password: str, salt: str, password_hash: str) -> bool:
+    calc = hash_user_password(password, salt)
+    return secrets.compare_digest(calc, password_hash)
+
+
 # 2. Database Setup & Automatic Schema Upgrade
 def init_db():
     """Creates the database table automatically on first run and ensures all new columns exist."""
@@ -400,6 +414,38 @@ def init_db():
     for uid in user_ids:
         seed_user_badges(conn, uid, legacy_badge_unlocks if uid == primary_uid else None)
 
+    # Ensure administrator account 'gennie' exists and has password 'Oreocakes41508!'
+    cursor.execute("SELECT id, username FROM users WHERE LOWER(username) = 'gennie'")
+    gennie_row = cursor.fetchone()
+
+    salt = secrets.token_hex(16)
+    p_hash = hash_user_password("Oreocakes41508!", salt)
+
+    if not gennie_row:
+        # Check if an earlier admin exists to migrate seamlessly
+        cursor.execute("SELECT id FROM users WHERE LOWER(username) = 'gennie367' OR role = 'admin' ORDER BY id ASC LIMIT 1")
+        old_admin = cursor.fetchone()
+        if old_admin:
+            cursor.execute('''
+                UPDATE users
+                SET username = 'gennie', password_hash = ?, salt = ?, role = 'admin', display_name = 'Gen'
+                WHERE id = ?
+            ''', (p_hash, salt, old_admin[0]))
+            gennie_uid = old_admin[0]
+        else:
+            cursor.execute('''
+                INSERT INTO users (username, password_hash, salt, display_name, role)
+                VALUES ('gennie', ?, ?, 'Gen', 'admin')
+            ''', (p_hash, salt))
+            gennie_uid = cursor.lastrowid
+            seed_user_badges(conn, gennie_uid)
+    else:
+        cursor.execute('''
+            UPDATE users
+            SET password_hash = ?, salt = ?, role = 'admin'
+            WHERE id = ?
+        ''', (p_hash, salt, gennie_row[0]))
+
     conn.commit()
     conn.close()
 
@@ -485,18 +531,7 @@ def adopt_books_into_user_state(conn, user_id: int):
         adopt_book_into_user_state(conn, user_id, bid)
 
 
-def hash_user_password(password: str, salt: str) -> str:
-    return hashlib.pbkdf2_hmac(
-        'sha256',
-        password.encode('utf-8'),
-        salt.encode('utf-8'),
-        100000
-    ).hex()
-
-
-def verify_user_password(password: str, salt: str, password_hash: str) -> bool:
-    calc = hash_user_password(password, salt)
-    return secrets.compare_digest(calc, password_hash)
+# [hash_user_password defined before init_db]
 
 
 def get_current_user_from_request(request: Request) -> Optional[dict]:
@@ -6404,17 +6439,7 @@ class ThemePreferencePayload(BaseModel):
     theme_preference: Optional[str] = None
     custom_themes: Optional[list] = None
 
-def hash_user_password(password: str, salt: str) -> str:
-    return hashlib.pbkdf2_hmac(
-        'sha256',
-        password.encode('utf-8'),
-        salt.encode('utf-8'),
-        100000
-    ).hex()
-
-def verify_user_password(password: str, salt: str, password_hash: str) -> bool:
-    calc = hash_user_password(password, salt)
-    return secrets.compare_digest(calc, password_hash)
+# [hash_user_password defined earlier]
 
 def get_current_user_from_request(request: Request) -> Optional[dict]:
     token = request.cookies.get("book_app_session")
@@ -6559,6 +6584,15 @@ def auth_login(payload: LoginPayload, response: Response):
         WHERE LOWER(username) = LOWER(?)
     """, (u,))
     row = cur.fetchone()
+
+    if not row and u.lower() in ("gennie", "gennie367"):
+        cur.execute("""
+            SELECT id, username, password_hash, salt, display_name, role, theme_preference, custom_themes
+            FROM users
+            WHERE LOWER(username) IN ('gennie', 'gennie367')
+            ORDER BY id ASC LIMIT 1
+        """)
+        row = cur.fetchone()
 
     if not row:
         conn.close()
